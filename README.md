@@ -1,2 +1,2 @@
 # esm_lab
-Exploring ESM code - a messy repository 
+Exploring ESM code - a messy repository for getting familiar
