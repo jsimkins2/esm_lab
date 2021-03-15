@@ -12,10 +12,10 @@ dependencies:
   - boost-cpp=1.70.0=hd59e818_1
   - brotlipy=0.7.0=py37h9bfed18_1000
   - bzip2=1.0.8=h0b31af3_2
-  - ca-certificates=2020.10.14=0
+  - ca-certificates=2021.1.19=hecd8cb5_1
   - cairo=1.14.12=he6fea26_5
   - cartopy=0.17.0=py37h4076dca_1009
-  - certifi=2020.6.20=pyhd3eb1b0_3
+  - certifi=2020.12.5=py37hecd8cb5_0
   - cffi=1.14.0=py37hc512035_1
   - cfitsio=3.470=h389770f_2
   - cftime=1.1.3=py37h10e2902_0
@@ -55,7 +55,7 @@ dependencies:
   - hdf4=4.2.13=h84186c3_1003
   - hdf5=1.10.4=nompi_h0cbb7df_1106
   - heapdict=1.0.1=py_0
-  - holoviews=1.13.3=pyh9f0ad1d_0
+  - holoviews=1.14.2=pyhd3eb1b0_0
   - hvplot=0.6.0=pyh9f0ad1d_0
   - icu=58.2=h0a44026_1000
   - idna=2.10=pyh9f0ad1d_0
@@ -118,7 +118,7 @@ dependencies:
   - numpy=1.18.5=py37h7687784_0
   - olefile=0.46=py_0
   - openjpeg=2.3.1=h254dc36_3
-  - openssl=1.1.1h=haf1e3a3_0
+  - openssl=1.1.1j=h9ed2024_0
   - owslib=0.20.0=py_0
   - packaging=20.4=pyh9f0ad1d_0
   - pandas=1.0.5=py37h94625e5_0
@@ -200,4 +200,4 @@ dependencies:
   - zipp=3.1.0=py_0
   - zlib=1.2.11=h1de35cc_3
   - zstd=1.3.7=h06149cd_1001
-prefix: /Users/james/anaconda3/envs/holo37
+prefix: /Users/james/opt/anaconda3/envs/holo37
