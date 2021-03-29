@@ -1,11 +1,13 @@
 # Small helper class to show basic system information
 # Useful for debugging module/system conflicts
+# Revised:
+#   https://www.python.org/dev/peps/pep-0008/#package-and-module-names
 
 import os, sys, re
 import psutil
 import shlex, subprocess
 
-class sysInfo:
+class SysInfo:
 
     # Functions
 
@@ -20,8 +22,12 @@ class sysInfo:
         # Simple package and version checker
         # Defaults to equal or higher, or set orLower to True to test reverse
         # X.Y.Z each of X Y Z might be 10a or 10b
-        pass    
+        pass
         
+    def is_lab_notebook(self):
+        return any(re.search('jupyter-lab', x)
+                   for x in psutil.Process().parent().cmdline())    
+    
     def loadVersionData(self):
         # Load conda version information for other functions
         # Requires "conda" to be installed within the environment
@@ -119,6 +125,4 @@ class sysInfo:
     def show(self, showOnly=[], vList=[]):
         self.showAll(vList=vList)
 
-    def is_lab_notebook(self):
-        return any(re.search('jupyter-lab', x)
-                   for x in psutil.Process().parent().cmdline())
+

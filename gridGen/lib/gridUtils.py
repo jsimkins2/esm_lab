@@ -1,19 +1,23 @@
-# python docstrings should conform to reStructuredText
-# 
-
-# From: 
+# Lambert Conformal Conic grid generation provided by:
 #  https://github.com/nikizadehgfdl/grid_generation/blob/dev/jupynotebooks/regional_grid_spherical.ipynb
 
 # TODO:
-#   [DONE] We can place default settings into __init__ and spread through the code.
-#     this would allow users to change defaults globally.  See __init__.
+#   [DONE] Revise for https://www.python.org/dev/peps/pep-0008/#package-and-module-names
+#   [DONE] Refactor matplotlib code to use Matplotlib panes
+#      [DONE] Requires refactoring subplot to subsplots. See: https://towardsdatascience.com/plt-subplot-or-plt-subplots-understanding-state-based-vs-object-oriented-programming-in-pyplot-4ba0c7283f5d
+#      [X] Another good example: https://unidata.github.io/MetPy/latest/examples/Four_Panel_Map.html
+#   [DONE] Allow display of important messages and warnings in panel application
+#   [] Further consolidate matplotlib code
 #   [] Do we have to declare everything in __init__ first or can be push all that to respective reset/clear functions?
-#   [] Add a formal logging mechanism.
+#   [] refactor refineS and refineR options as Niki had them defined
+#   [] readGrid() and makeGrid() make use of xarray structures instead so we can utilize to_netcdf() serialization
+#   [] Pass back an error graphic instead of None for figures that do not render
+#   [] Add a formal logging/message mechanism.
+#      [] Move all this to options.  Interact with message buffer.
 #      [] Maybe warnings are better? Try some out.
+#      [] Create a message buffer/system for information 
 #   [] Bring in code that converts ROMS grids to MOM6 grids
 #      [] Allow conversion of MOM6 grids to ROMS grids
-#   [] to_netcdf() export a binary structure (stream?)
-#   [] writeGrid()
 #   [] For now, the gridParameters are always in reference to a center point in a grid
 #     in the future, one may fix a side or point of the grid and grow out from that point
 #     instead of the center.
@@ -22,26 +26,36 @@
 #   [] grid reading and plot parameter defaults should be dynamic with grid type declaration and potentially
 #      split out into separate library modules? lib/gridTools/grids/{MOM6,ROMS,WRF}
 
-#General imports and definitions
+# Adopt:
+#   https://www.python.org/dev/peps/pep-0008/#package-and-module-names
+#   Function and variables are mixed type
+
+# General imports and definitions
 import os, sys
 import cartopy
 import numpy as np
-import matplotlib.pyplot as plt
-import netCDF4 as nc
+import xarray as xr
 import warnings
 import pdb
 
+# Needed for panel.pane                
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_agg import FigureCanvas  # not needed for mpl >= 3.1
+
 # Required for ROMS->MOM6 conversion
-#import Spherical
+import Spherical
 
-class gridUtils:
+class GridUtils:
 
-    def __init__(self):
+    def __init__(self, app={}):
         # Constants
         self.PI_180 = np.pi/180.
         self._default_Re = 6.378e6
         # File pointer
         self.ncfp = None
+        # Internal parameters
+        self.usePaneMatplotlib = False
+        self.matplotlibImports = False
         # Debugging/logging
         self.debugLevel = 0
         self.verboseLevel = 0
@@ -67,12 +81,63 @@ class gridUtils:
         # Plot parameters
         self.grid['_meta']['plotParameters'] = self.plotParameterDefaults
         self.grid['_meta']['plotParameterKeys'] = self.grid['_meta']['plotParameters'].keys()
-       
+               
     # Utility functions
+    
+    def application(self, app={}):
+        '''Attach application items to the GridUtil object.
+        
+            app = {
+                'messages': panel.widget.TextBox     # Generally a pointer to a panel widget for display of text
+                'defaultFigureSize': (8,6)           # Default figure size to return from matplotlib
+                'usePaneMatplotlib': True/False      # Instructs GridUtils to use panel.pane.Matplotlib for plot objects 
+            }
+        
+        '''
+        # Setup links to panel, etc
+        appKeys = app.keys()
+        if 'messages' in appKeys:
+            self.msgBox = app['messages']
+            self.msgBox.value = "GridUtils attached to application."
+        if 'defaultFigureSize' in appKeys:
+            self.plotParameterDefaults['figsize'] = app['defaultFigureSize']
+        if 'usePaneMatplotlib' in appKeys:
+            self.usePaneMatplotlib = app['usePaneMatplotlib']
+        else:
+            self.usePaneMatplotlib = False       
         
     def printVerbose(self, msg):
         if self.verboseLevel > 0:
-            print(msg)        
+            print(msg)
+    
+    def setDebugLevel(self, newLevel):
+        '''Set a new debug level.
+
+        :param newLevel: debug level to set or update
+        :type newLevel: integer
+        :return: none
+        :rtype: none
+        
+        .. note::
+            Areas of code that typically cause errors have try/except blocks.  Some of these
+            have python debugging breakpoints that are active when the debug level is set
+            to a positive number.        
+        '''
+        self.debugLevel = newLevel
+    
+    def setVerboseLevel(self, newLevel):
+        '''Set a new verbose level.
+
+        :param newLevel: verbose level to set or update
+        :type newLevel: integer
+        :return: none
+        :rtype: none
+        
+        .. note::
+            Setting this to a positive number will increase the feedback from this
+            module.
+        '''
+        self.verboseLevel = newLevel
     
     # Grid operations
     
@@ -111,7 +176,7 @@ class gridUtils:
             self.grid['_meta']['gridParameters']['projection']['lat_2'] =\
                 self.grid['_meta']['gridParameters']['projection']['lat_0'] + (self.grid['_meta']['gridParameters']['dy'] / 2.0)
     
-    # Original functions provided by Niki Zadeh
+    # Original functions provided by Niki Zadeh - Lambert Conformal Conic grids
     # Grid creation and rotation in spherical coordinates
     def mesh_plot(self, lon, lat, lon0=0., lat0=90.):
         """Plot a given mesh with a perspective centered at (lon0,lat0)"""
@@ -308,6 +373,13 @@ class gridUtils:
     # Plotting specific functions
     # These functions should not care what grid is loaded. 
     # Plotting is affected by plotParameters and gridParameters.
+
+    def newFigure(self, figsize=(8,6)):
+        '''Establish a new matplotlib figure.'''
+                     
+        fig = Figure(figsize=figsize)
+        
+        return fig
     
     def plotGrid(self):
         '''Perform a plot operation.
@@ -357,16 +429,21 @@ class gridUtils:
         '''Plot a given mesh using Lambert Conformal Conic projection.'''
         '''Requires: central_latitude, central_longitude and two standard parallels (latitude).'''
         figsize = self.getPlotParameter('figsize', default=(8,8))
-        f = plt.figure(figsize=figsize)
+        #f = plt.figure(figsize=figsize)
+        f = self.newFigure(figsize=figsize)
         central_longitude = self.getPlotParameter('lon_0', subKey='projection', default=-96.0)
         central_latitude = self.getPlotParameter('lat_0', subKey='projection', default=39.0)
         lat_1 = self.getPlotParameter('lat_1', subKey='projection', default=33.0)
         lat_2 = self.getPlotParameter('lat_2', subKey='projection', default=45.0)
         standard_parallels = (lat_1, lat_2)
-        ax = plt.subplot(111, 
-            projection=cartopy.crs.LambertConformal(
+        crs = cartopy.crs.LambertConformal(
                 central_longitude=central_longitude, central_latitude=central_latitude,
-                standard_parallels=standard_parallels))
+                standard_parallels=standard_parallels)
+        #ax = plt.subplot(111, 
+        #    projection=cartopy.crs.LambertConformal(
+        #        central_longitude=central_longitude, central_latitude=central_latitude,
+        #        standard_parallels=standard_parallels))
+        ax = f.subplots(subplot_kw={'projection': crs})
         mapExtent = self.getPlotParameter('extent', default=[])
         mapCRS = self.getPlotParameter('extentCRS', default=cartopy.crs.PlateCarree())
         if len(mapExtent) == 0:
@@ -400,11 +477,15 @@ class gridUtils:
     def plotGridMercator(self):
         '''Plot a given mesh using Mercator projection.'''
         figsize = self.getPlotParameter('figsize', default=(8,8))
-        f = plt.figure(figsize=figsize)
+        #f = plt.figure(figsize=figsize)
+        f = self.newFigure(figsize=figsize)
         central_longitude = self.getPlotParameter('lon_0', subKey='projection', default=0.0)
-        ax = plt.subplot(111, 
-            projection=cartopy.crs.Mercator(
-                central_longitude=central_longitude))
+        crs = cartopy.crs.Mercator(
+                central_longitude=central_longitude)
+        #ax = plt.subplot(111, 
+        #    projection=cartopy.crs.Mercator(
+        #        central_longitude=central_longitude))
+        ax = f.subplots(subplot_kw={'projection': crs})
         mapExtent = self.getPlotParameter('extent', default=[])
         mapCRS = self.getPlotParameter('extentCRS', default=cartopy.crs.PlateCarree())
         if len(mapExtent) == 0:
@@ -439,13 +520,18 @@ class gridUtils:
     def plotGridNearsidePerspective(self):
         """Plot a given mesh using the nearside perspective centered at (central_longitude,central_latitude)"""
         figsize = self.getPlotParameter('figsize', default=(8,8))
-        f = plt.figure(figsize=figsize)
+        #f = plt.figure(figsize=figsize)
+        f = self.newFigure(figsize=figsize)
         central_longitude = self.getPlotParameter('lon_0', subKey='projection', default=0.0)
         central_latitude = self.getPlotParameter('lat_0', subKey='projection', default=90.0)
         satellite_height = self.getPlotParameter('satellite_height', default=35785831)
-        ax = plt.subplot(111, 
-            projection=cartopy.crs.NearsidePerspective(
-                central_longitude=central_longitude, central_latitude=central_latitude, satellite_height=satellite_height))
+        crs = cartopy.crs.NearsidePerspective(central_longitude=central_longitude, central_latitude=central_latitude, satellite_height=satellite_height)
+        #ax = f.subplots(111, 
+        #    projection=cartopy.crs.NearsidePerspective(
+        #        central_longitude=central_longitude, central_latitude=central_latitude, satellite_height=satellite_height))
+        ax = f.subplots(subplot_kw={'projection': crs})
+        if self.usePaneMatplotlib:
+            FigureCanvas(f)
         mapExtent = self.getPlotParameter('extent', default=[])
         mapCRS = self.getPlotParameter('extentCRS', default=cartopy.crs.PlateCarree())
         if len(mapExtent) == 0:
@@ -480,11 +566,14 @@ class gridUtils:
     def plotGridNorthPolarStereo(self):
         '''Generic plotting function for North Polar Stereo maps'''
         figsize = self.getPlotParameter('figsize', default=(8,8))
-        f = plt.figure(figsize=figsize)
+        #f = plt.figure(figsize=figsize)
+        f = self.newFigure(figsize=figsize)
         central_longitude = self.getPlotParameter('lon_0', subKey='projection', default=0.0)
         true_scale_latitude = self.getPlotParameter('lat_ts', subKey='projection', default=75.0)
-        ax = plt.subplot(111, projection=
-            cartopy.crs.NorthPolarStereo(central_longitude=central_longitude, true_scale_latitude=true_scale_latitude))
+        crs = cartopy.crs.NorthPolarStereo(central_longitude=central_longitude, true_scale_latitude=true_scale_latitude)
+        #ax = plt.subplot(111, projection=
+        #    cartopy.crs.NorthPolarStereo(central_longitude=central_longitude, true_scale_latitude=true_scale_latitude))
+        ax = f.subplots(subplot_kw={'projection': crs})
         mapExtent = self.getPlotParameter('extent', default=[])
         mapCRS = self.getPlotParameter('extentCRS', default=cartopy.crs.PlateCarree())
         if len(mapExtent) == 0:
