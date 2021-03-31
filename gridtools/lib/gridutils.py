@@ -1,34 +1,60 @@
-# Lambert Conformal Conic grid generation provided by:
-#  https://github.com/nikizadehgfdl/grid_generation/blob/dev/jupynotebooks/regional_grid_spherical.ipynb
+# Credits
+#
+# James Simkins
+# Rob Cermak
+# Niki Zadeh
+# Raphael Dussin
+
+# TASKS:
+#   [] grid creation/editor
+#      [] grid metrics
+#      [DONE] make Lambert Conformal Grids; needs global testing
+#      [] grid generation in other projections
+#   [] grid mask editor (land, etc)
+#   [] integration of bathymetric sources and apply to grids
+#      Niki: https://github.com/nikizadehgfdl/ocean_model_topog_generator
 
 # TODO:
-#   [DONE] Revise for https://www.python.org/dev/peps/pep-0008/#package-and-module-names
-#   [DONE] Refactor matplotlib code to use Matplotlib panes
-#      [DONE] Requires refactoring subplot to subsplots. See: https://towardsdatascience.com/plt-subplot-or-plt-subplots-understanding-state-based-vs-object-oriented-programming-in-pyplot-4ba0c7283f5d
-#      [X] Another good example: https://unidata.github.io/MetPy/latest/examples/Four_Panel_Map.html
-#   [DONE] Allow display of important messages and warnings in panel application
-#   [DONE] Refactor code to use xarray Dataset structures so to_netcdf() can be used for serialization
 #   [] Further consolidate matplotlib plotting code
 #      [] Refactor plotting code.  It is mostly the same except for setting the projection.
 #   [] Do we have to declare everything in __init__ first or can be push all that to respective reset/clear functions?
 #   [] refactor refineS and refineR options as Niki had them defined
 #   [] Pass back an error graphic instead of None for figures that do not render
 #   [] Add a formal logging/message mechanism.
+#      [DONE] Allow display of important messages and warnings in panel application
 #      [] Move all this to options.  Interact with message buffer.
 #      [] Maybe warnings are better? Try some out.
 #      [] Create a message buffer/system for information 
-#   [] Bring in code that converts ROMS grids to MOM6 grids
-#      [] Allow conversion of MOM6 grids to ROMS grids
 #   [] For now, the gridParameters are always in reference to a center point in a grid
 #     in the future, one may fix a side or point of the grid and grow out from that point
 #     instead of the center.
 #   [] makeGrid assumes degrees at this point.
+#
+# WISH:
+#   [] tripolar grids
+#   [] Bring in code that converts ROMS grids to MOM6 grids
+#      [] Allow conversion of MOM6 grids to ROMS grids
 #   [] grid reading and plot parameter defaults should be dynamic with grid type declaration and potentially
 #      split out into separate library modules? lib/gridTools/grids/{MOM6,ROMS,WRF}
+#   Upstream requests:
+#   [] Place additional projection metadata into MOM6 grid files
 
-# Adopt:
-#   https://www.python.org/dev/peps/pep-0008/#package-and-module-names
-#   Function and variables are mixed type
+# Important references that made this project go
+# Niki Zadeh
+#  * Lambert Conformal Conic grid generation provided by:
+#    https://github.com/nikizadehgfdl/grid_generation/blob/dev/jupynotebooks/regional_grid_spherical.ipynb
+# Bookmarks
+#  * https://www.python.org/dev/peps/pep-0008/#package-and-module-names
+#  * https://scitools.org.uk/cartopy/docs/latest/index.html
+#  * https://scitools.org.uk/cartopy/docs/latest/crs/projections.html
+#  * https://panel.holoviz.org/gallery/index.html
+#  * https://towardsdatascience.com/plt-subplot-or-plt-subplots-understanding-state-based-vs-object-oriented-programming-in-pyplot-4ba0c7283f5d
+#  * https://unidata.github.io/MetPy/latest/examples/Four_Panel_Map.html
+#  * https://xarray.pydata.org/en/stable/examples/ROMS_ocean_model.html
+#  * https://xarray.pydata.org/en/stable/data-structures.html#dictionary-like-methods
+#  * https://xarray.pydata.org/en/stable/dask.html
+#  * https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html
+#  * https://github.com/binder-examples/conda
 
 # General imports and definitions
 import os, sys
@@ -53,10 +79,12 @@ class GridUtils:
         self._default_Re = 6.378e6
         # File pointer
         self.xrOpen = False
+        self.xrFilename = None
         self.xrDS = xr.Dataset()
         self.grid = self.xrDS
         # Internal parameters
         self.usePaneMatplotlib = False
+        self.msgBox = None
         # Debugging/logging
         self.debugLevel = 0
         self.verboseLevel = 0
@@ -106,8 +134,20 @@ class GridUtils:
             self.usePaneMatplotlib = False       
         
     def printVerbose(self, msg):
+        '''
+        If verboseLevel is non-zero, some additional messages are produced.  If
+        this is attached to a panel application with a message box, the output is
+        sent to that object.
+        '''
         if self.verboseLevel > 0:
+            if hasattr(self, 'msgBox'):
+                if self.msgBox:
+                    self.msgBox.value = msg
+                    return
+            
             print(msg)
+
+        return
     
     def setDebugLevel(self, newLevel):
         '''Set a new debug level.
@@ -149,6 +189,7 @@ class GridUtils:
         if self.xrOpen:
             self.closeDataset()
         
+        self.xrFilename = None
         self.xrDS = xr.Dataset()
         self.grid = self.xrDS
         self.gridInfo = {}
@@ -360,6 +401,7 @@ class GridUtils:
         try:
             self.xrDS = xr.open_dataset(inputFilename)
             self.xrOpen = True
+            self.xrFilename = inputFilename
         except:
             if self.verboseLevel > 0:
                 self.printVerbose("WARNING: Unable to load dataset: %s" % (inputFilename))
@@ -369,7 +411,7 @@ class GridUtils:
             if self.debugLevel > 0:
                 raise
             
-    def readGrid(self, opts={'type': 'MOM6'}, local=None):
+    def readGrid(self, opts={'type': 'MOM6'}, local=None, localFilename=None):
         '''Read a grid.
         
         This can be generalized to work with "other" grids if we desired? (ROMS, HyCOM, etc)
@@ -406,6 +448,22 @@ class GridUtils:
                     #    self.grid['x'].min(), self.grid['x'].max(), self.grid['y'].min(), self.grid['y'].max()
                     #]
                     self.grid = self.xrDS
+        
+        if localFilename:
+            self.xrFilename = localFilename
+    
+    def saveGrid(self, filename=None):
+        '''
+        This operation is destructive using the last known filename which can be overridden.
+        '''
+        if filename:
+            self.xrFilename = filename
+            
+        try:
+            self.grid.to_netcdf(self.xrFilename)
+            self.printVerbose("Successfully wrote netCDF file to %s" % (self.xrFilename))
+        except:
+            self.printVerbose("Failed to write netCDF file to %s" % (self.xrFilename))
     
     # Plotting specific functions
     # These functions should not care what grid is loaded. 
