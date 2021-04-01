@@ -49,5 +49,3 @@ def quad_area(lat, lon):
     a2 = angle_between(c3, c2, c0)
     a3 = angle_between(c0, c3, c1)
     return a0 + a1 + a2 + a3 - 2. * numpy.pi
-
-

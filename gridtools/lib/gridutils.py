@@ -7,7 +7,10 @@
 
 # TASKS:
 #   [] grid creation/editor
-#      [] grid metrics
+#      [X] grid metrics
+#        [] Mercator (might be 0? lined up along latitude lines)
+#        [DONE] Spherical solution is complete via ROMS to MOM6 converter
+#        [] Polar (might be the same as spherical?)
 #      [DONE] make Lambert Conformal Grids; needs global testing
 #      [] grid generation in other projections
 #   [] grid mask editor (land, etc)
@@ -29,6 +32,7 @@
 #     in the future, one may fix a side or point of the grid and grow out from that point
 #     instead of the center.
 #   [] makeGrid assumes degrees at this point.
+#   [] Add testing harness using pytest.
 #
 # WISH:
 #   [] tripolar grids
@@ -40,6 +44,10 @@
 #   [] Place additional projection metadata into MOM6 grid files
 
 # Important references that made this project go
+# Mehmet Ilicak; Alistair Adcroft
+#  * ROMS to MOM6 grid converter
+#  * https://raw.githubusercontent.com/ESMG/pyroms/python3/examples/grid_MOM6/convert_ROMS_grid_to_MOM6.py
+#  * https://raw.githubusercontent.com/ESMG/pyroms/python3/examples/grid_MOM6/Spherical.py
 # Niki Zadeh
 #  * Lambert Conformal Conic grid generation provided by:
 #    https://github.com/nikizadehgfdl/grid_generation/blob/dev/jupynotebooks/regional_grid_spherical.ipynb
@@ -68,7 +76,9 @@ import pdb
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_agg import FigureCanvas  # not needed for mpl >= 3.1
 
-# Required for ROMS->MOM6 conversion
+# Required for:
+#  * ROMS to MOM6 grid conversion
+#  * Computation of MOM6 grid metrics
 import Spherical
 
 class GridUtils:
@@ -197,6 +207,49 @@ class GridUtils:
         self.clearGridParameters()
         self.resetPlotParameters()
         
+    def computeGridMetrics(self):
+        '''Compute MOM6 grid metrics: angle_dx, dx, dy and area.'''
+
+        self.grid.attrs['grid_version'] = "0.2"
+        self.grid.attrs['code_version'] = "GridTools: beta"
+        self.grid.attrs['history'] = "sometime: GridTools"
+        self.grid.attrs['projection'] = self.gridInfo['gridParameters']['projection']['name']
+        self.grid.attrs['proj4string'] = self.gridInfo['gridParameters']['projection']['proj4string']
+        
+        R = 6370.e3 # Radius of sphere        
+
+        # Make a copy of the lon grid as values are changed for computation
+        lon = self.grid.x.copy()
+        lat = self.grid.y
+        
+        # Approximate edge lengths as great arcs
+        self.grid['dx'] = (('nyp', 'nx'),  R * Spherical.angle_through_center( (lat[ :,1:],lon[ :,1:]), (lat[:  ,:-1],lon[:  ,:-1]) ))
+        self.grid.dx.attrs['units'] = 'meters'
+        self.grid.dx.encoding['_FillValue'] = False
+        self.grid['dy'] = (('ny' , 'nxp'), R * Spherical.angle_through_center( (lat[1:, :],lon[1:, :]), (lat[:-1,:  ],lon[:-1,:  ]) ))
+        self.grid.dy.attrs['units'] = 'meters'
+        self.grid.dy.encoding['_FillValue'] = False
+        
+        # Scaling by latitude?
+        cos_lat = np.cos(np.radians(lat))
+        
+        # Presize the angle_dx array
+        angle_dx = np.zeros(lat.shape)
+        # Fix lon so they are 0 to 360 for computation of angle_dx
+        lon = np.where(lon < 0., lon+360, lon)
+        angle_dx[:,1:-1] = np.arctan2( (lat[:,2:] - lat[:,:-2]) , ((lon[:,2:] - lon[:,:-2]) * cos_lat[:,1:-1]) )
+        angle_dx[:, 0  ] = np.arctan2( (lat[:, 1] - lat[:, 0 ]) , ((lon[:, 1] - lon[:, 0 ]) * cos_lat[:, 0  ]) )
+        angle_dx[:,-1  ] = np.arctan2( (lat[:,-1] - lat[:,-2 ]) , ((lon[:,-1] - lon[:,-2 ]) * cos_lat[:,-1  ]) )
+        self.grid['angle_dx'] = (('nyp', 'nxp'), angle_dx)
+        self.grid.angle_dx.attrs['units'] = 'radians'
+        self.grid.angle_dx.encoding['_FillValue'] = False
+        
+        self.grid['area'] = (('ny','nx'), R * R * Spherical.quad_area(lat, lon))
+        self.grid.area.attrs['units'] = 'meters^2'
+        self.grid.area.encoding['_FillValue'] = False
+
+        return
+        
     def makeGrid(self):
         '''Using supplied grid parameters, populate a grid in memory.'''
         if self.gridInfo['gridParameters']['projection']['name'] == 'LambertConformalConic':
@@ -212,19 +265,20 @@ class GridUtils:
                 self.gridInfo['gridParameters']['gridResolution'] * self.gridInfo['gridParameters']['gridMode']
             )
             
-            # Convert to xarray
-            #self.grid['x'] = lonGrid
-            #self.grid['y'] = latGrid
             (nxp, nyp) = lonGrid.shape
             
             self.grid['x'] = (('nyp','nxp'), lonGrid)
+            self.grid.x.attrs['units'] = 'degrees_east'
+            self.grid.x.encoding['_FillValue'] = False
             self.grid['y'] = (('nyp','nxp'), latGrid)
+            self.grid.y.attrs['units'] = 'degrees_north'
+            self.grid.y.encoding['_FillValue'] = False
+            
+            # Compute grid metrics
+            self.computeGridMetrics()
             
             self.xrOpen = True
             
-            #self.grid.coords['nyp'] = ('nyp', nyp)
-            #self.grid.coords['nxp'] = ('nxp', nxp)
-        
             # This technique seems to return a Lambert Conformal Projection with the following properties
             # This only works if the grid does not overlap a polar point
             # (lat_0 - (dy/2), lat_0 + (dy/2))
@@ -388,7 +442,7 @@ class GridUtils:
             
     def openDataset(self, inputFilename):
         '''Open a grid file.  The file pointer is internal to the object.
-        To access it, use: obj.xrDS'''
+        To access it, use: obj.xrDS or obj.grid'''
         # check if we have a vailid inputFilename
         if not(os.path.isfile(inputFilename)):
             self.printVerbose("Dataset not found: %s" % (inputFilename))
@@ -426,27 +480,8 @@ class GridUtils:
         else:
             if self.xrOpen:
                 if opts['type'] == 'MOM6':
-                    # Load dims
-                    # Get the grid shape from the dimensions instead of the shape of a variable
-                    #for dimKey in self.ncfp.dimensions:
-                    #    self.gridInfo['dimensions'][dimKey] = self.ncfp.dimensions[dimKey].size
-
-                    #self.gridInfo['shape'] = (
-                    #    self.gridInfo['dimensions']['nyp'], self.gridInfo['dimensions']['nxp']
-                    #)
-
-                    # Load variables ['lons', 'lats']
-                    #read_variables = ['x','y']
-                    #for var in read_variables:
-                    #    self.grid[var] = self.ncfp.variables[var][:][:]
-                    #self.grid['xr'] = self.xrDS
-
                     # Save grid metadata
                     self.gridInfo['type'] = opts['type']
-                    # This method of computing the extent is subject to problems
-                    #self.gridInfo["extent"] = [
-                    #    self.grid['x'].min(), self.grid['x'].max(), self.grid['y'].min(), self.grid['y'].max()
-                    #]
                     self.grid = self.xrDS
         
         if localFilename:
