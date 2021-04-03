@@ -214,7 +214,7 @@ class GridUtils:
         self.grid.attrs['code_version'] = "GridTools: beta"
         self.grid.attrs['history'] = "sometime: GridTools"
         self.grid.attrs['projection'] = self.gridInfo['gridParameters']['projection']['name']
-        self.grid.attrs['proj4string'] = self.gridInfo['gridParameters']['projection']['proj4string']
+        self.grid.attrs['projString'] = self.gridInfo['gridParameters']['projection']['projString']
         
         R = 6370.e3 # Radius of sphere        
 
