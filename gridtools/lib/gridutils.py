@@ -3,66 +3,8 @@
 # James Simkins
 # Rob Cermak
 # Niki Zadeh
+# Alistair Adcroft
 # Raphael Dussin
-
-# TASKS:
-#   [] grid creation/editor
-#      [X] grid metrics
-#        [] Mercator (might be 0? lined up along latitude lines)
-#        [DONE] Spherical solution is complete via ROMS to MOM6 converter
-#        [] Polar (might be the same as spherical?)
-#      [DONE] make Lambert Conformal Grids; needs global testing
-#      [] grid generation in other projections
-#   [] grid mask editor (land, etc)
-#   [] integration of bathymetric sources and apply to grids
-#      Niki: https://github.com/nikizadehgfdl/ocean_model_topog_generator
-
-# TODO:
-#   [] Further consolidate matplotlib plotting code
-#      [] Refactor plotting code.  It is mostly the same except for setting the projection.
-#   [] Do we have to declare everything in __init__ first or can be push all that to respective reset/clear functions?
-#   [] refactor refineS and refineR options as Niki had them defined
-#   [] Pass back an error graphic instead of None for figures that do not render
-#   [] Add a formal logging/message mechanism.
-#      [DONE] Allow display of important messages and warnings in panel application
-#      [] Move all this to options.  Interact with message buffer.
-#      [] Maybe warnings are better? Try some out.
-#      [] Create a message buffer/system for information 
-#   [] For now, the gridParameters are always in reference to a center point in a grid
-#     in the future, one may fix a side or point of the grid and grow out from that point
-#     instead of the center.
-#   [] makeGrid assumes degrees at this point.
-#   [] Add testing harness using pytest.
-#
-# WISH:
-#   [] tripolar grids
-#   [] Bring in code that converts ROMS grids to MOM6 grids
-#      [] Allow conversion of MOM6 grids to ROMS grids
-#   [] grid reading and plot parameter defaults should be dynamic with grid type declaration and potentially
-#      split out into separate library modules? lib/gridTools/grids/{MOM6,ROMS,WRF}
-#   Upstream requests:
-#   [] Place additional projection metadata into MOM6 grid files
-
-# Important references that made this project go
-# Mehmet Ilicak; Alistair Adcroft
-#  * ROMS to MOM6 grid converter
-#  * https://raw.githubusercontent.com/ESMG/pyroms/python3/examples/grid_MOM6/convert_ROMS_grid_to_MOM6.py
-#  * https://raw.githubusercontent.com/ESMG/pyroms/python3/examples/grid_MOM6/Spherical.py
-# Niki Zadeh
-#  * Lambert Conformal Conic grid generation provided by:
-#    https://github.com/nikizadehgfdl/grid_generation/blob/dev/jupynotebooks/regional_grid_spherical.ipynb
-# Bookmarks
-#  * https://www.python.org/dev/peps/pep-0008/#package-and-module-names
-#  * https://scitools.org.uk/cartopy/docs/latest/index.html
-#  * https://scitools.org.uk/cartopy/docs/latest/crs/projections.html
-#  * https://panel.holoviz.org/gallery/index.html
-#  * https://towardsdatascience.com/plt-subplot-or-plt-subplots-understanding-state-based-vs-object-oriented-programming-in-pyplot-4ba0c7283f5d
-#  * https://unidata.github.io/MetPy/latest/examples/Four_Panel_Map.html
-#  * https://xarray.pydata.org/en/stable/examples/ROMS_ocean_model.html
-#  * https://xarray.pydata.org/en/stable/data-structures.html#dictionary-like-methods
-#  * https://xarray.pydata.org/en/stable/dask.html
-#  * https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html
-#  * https://github.com/binder-examples/conda
 
 # General imports and definitions
 import os, sys
@@ -74,12 +16,17 @@ import pdb
 
 # Needed for panel.pane                
 from matplotlib.figure import Figure
-from matplotlib.backends.backend_agg import FigureCanvas  # not needed for mpl >= 3.1
+# not needed for mpl >= 3.1
+# Does not cause any problems to continue to use it
+from matplotlib.backends.backend_agg import FigureCanvas  
 
 # Required for:
 #  * ROMS to MOM6 grid conversion
 #  * Computation of MOM6 grid metrics
 import Spherical
+
+# GridUtils() application
+from app import App
 
 class GridUtils:
 
@@ -87,6 +34,7 @@ class GridUtils:
         # Constants
         self.PI_180 = np.pi/180.
         self._default_Re = 6.378e6
+        
         # File pointer
         self.xrOpen = False
         self.xrFilename = None
@@ -120,6 +68,11 @@ class GridUtils:
         self.gridInfo['plotParameterKeys'] = self.gridInfo['plotParameters'].keys()
                
     # Utility functions
+    
+    # Connect GridTools() to the actual applcation
+    def app(self):
+        dashboard = App(grd=self)
+        return dashboard.dashboard
     
     def application(self, app={}):
         '''Attach application items to the GridUtil object.
@@ -214,7 +167,7 @@ class GridUtils:
         self.grid.attrs['code_version'] = "GridTools: beta"
         self.grid.attrs['history'] = "sometime: GridTools"
         self.grid.attrs['projection'] = self.gridInfo['gridParameters']['projection']['name']
-        self.grid.attrs['projString'] = self.gridInfo['gridParameters']['projection']['projString']
+        self.grid.attrs['proj'] = self.gridInfo['gridParameters']['projection']['proj']
         
         R = 6370.e3 # Radius of sphere        
 
@@ -225,10 +178,8 @@ class GridUtils:
         # Approximate edge lengths as great arcs
         self.grid['dx'] = (('nyp', 'nx'),  R * Spherical.angle_through_center( (lat[ :,1:],lon[ :,1:]), (lat[:  ,:-1],lon[:  ,:-1]) ))
         self.grid.dx.attrs['units'] = 'meters'
-        self.grid.dx.encoding['_FillValue'] = False
         self.grid['dy'] = (('ny' , 'nxp'), R * Spherical.angle_through_center( (lat[1:, :],lon[1:, :]), (lat[:-1,:  ],lon[:-1,:  ]) ))
         self.grid.dy.attrs['units'] = 'meters'
-        self.grid.dy.encoding['_FillValue'] = False
         
         # Scaling by latitude?
         cos_lat = np.cos(np.radians(lat))
@@ -242,16 +193,36 @@ class GridUtils:
         angle_dx[:,-1  ] = np.arctan2( (lat[:,-1] - lat[:,-2 ]) , ((lon[:,-1] - lon[:,-2 ]) * cos_lat[:,-1  ]) )
         self.grid['angle_dx'] = (('nyp', 'nxp'), angle_dx)
         self.grid.angle_dx.attrs['units'] = 'radians'
-        self.grid.angle_dx.encoding['_FillValue'] = False
         
         self.grid['area'] = (('ny','nx'), R * R * Spherical.quad_area(lat, lon))
         self.grid.area.attrs['units'] = 'meters^2'
-        self.grid.area.encoding['_FillValue'] = False
 
         return
         
     def makeGrid(self):
         '''Using supplied grid parameters, populate a grid in memory.'''
+
+        # Make a grid in the Mercator projection
+        if self.gridInfo['gridParameters']['projection']['name'] == "Mercator":
+            self.gridInfo['gridParameters']['projection']['proj'] =\
+                    "+ellps=WGS84 +proj=merc +lon_0=%s +x_0=0.0 +y_0=0.0 +units=m +no_defs" %\
+                        (self.gridInfo['gridParameters']['projection']['lon_0'])
+
+        # Make a grid in the North Polar Stereo projection
+        if self.gridInfo['gridParameters']['projection']['name'] == "NorthPolarStereo":
+            self.gridInfo['gridParameters']['projection']['proj'] =\
+                    "+ellps=WGS84 +proj=stere +lat_0=%s +lon_0=%s  +x_0=0.0 +y_0=0.0 +no_defs" %\
+                        (self.gridInfo['gridParameters']['projection']['lat_0'],
+                        self.gridInfo['gridParameters']['projection']['lon_0'])
+
+        # Make a grid in the South Polar Stereo projection
+        if self.gridInfo['gridParameters']['projection']['name'] == "SouthPolarStereo":
+            self.gridInfo['gridParameters']['projection']['proj'] =\
+                    "+ellps=WGS84 +proj=stere +lat_0=%s +lon_0=%s +x_0=0.0 +y_0=0.0 +no_defs" %\
+                        (self.gridInfo['gridParameters']['projection']['lat_0'],
+                        self.gridInfo['gridParameters']['projection']['lon_0'])
+
+        # Make a grid in the Lambert Conformal Conic projection
         if self.gridInfo['gridParameters']['projection']['name'] == 'LambertConformalConic':
             # Sometimes tilt may not be specified, so use a default of 0.0
             if 'tilt' in self.gridInfo['gridParameters'].keys():
@@ -269,16 +240,9 @@ class GridUtils:
             
             self.grid['x'] = (('nyp','nxp'), lonGrid)
             self.grid.x.attrs['units'] = 'degrees_east'
-            self.grid.x.encoding['_FillValue'] = False
             self.grid['y'] = (('nyp','nxp'), latGrid)
             self.grid.y.attrs['units'] = 'degrees_north'
-            self.grid.y.encoding['_FillValue'] = False
-            
-            # Compute grid metrics
-            self.computeGridMetrics()
-            
-            self.xrOpen = True
-            
+
             # This technique seems to return a Lambert Conformal Projection with the following properties
             # This only works if the grid does not overlap a polar point
             # (lat_0 - (dy/2), lat_0 + (dy/2))
@@ -286,6 +250,18 @@ class GridUtils:
                 self.gridInfo['gridParameters']['projection']['lat_0'] - (self.gridInfo['gridParameters']['dy'] / 2.0)
             self.gridInfo['gridParameters']['projection']['lat_2'] =\
                 self.gridInfo['gridParameters']['projection']['lat_0'] + (self.gridInfo['gridParameters']['dy'] / 2.0)
+            self.gridInfo['gridParameters']['projection']['proj'] =\
+                    "+ellps=WGS84 +proj=lcc +lon_0=%s +lat_0=%s +x_0=0.0 +y_0=0.0 +lat_1=%s +lat_2=%s +no_defs" %\
+                        (self.gridInfo['gridParameters']['projection']['lat_0'],
+                        self.gridInfo['gridParameters']['projection']['lon_0'],
+                        self.gridInfo['gridParameters']['projection']['lat_1'],
+                        self.gridInfo['gridParameters']['projection']['lat_2'])
+
+            # Declare the xarray dataset open even though it is really only in memory at this point
+            self.xrOpen = True
+            
+            # Compute grid metrics
+            self.computeGridMetrics()
     
     # Original functions provided by Niki Zadeh - Lambert Conformal Conic grids
     # Grid creation and rotation in spherical coordinates
@@ -486,6 +462,16 @@ class GridUtils:
         
         if localFilename:
             self.xrFilename = localFilename
+
+    def removeFillValueAttributes(self):
+
+        ncEncoding = {}
+        ncVars = list(self.grid.variables)
+        for ncVar in ncVars:
+            ncEncoding[ncVar] = {'_FillValue': None}
+
+        return ncEncoding
+
     
     def saveGrid(self, filename=None):
         '''
@@ -495,7 +481,7 @@ class GridUtils:
             self.xrFilename = filename
             
         try:
-            self.grid.to_netcdf(self.xrFilename)
+            self.grid.to_netcdf(self.xrFilename, encoding=self.removeFillValueAttributes())
             self.printVerbose("Successfully wrote netCDF file to %s" % (self.xrFilename))
         except:
             self.printVerbose("Failed to write netCDF file to %s" % (self.xrFilename))
@@ -556,10 +542,53 @@ class GridUtils:
             return (self.plotGridNearsidePerspective())
         if plotProjection == 'NorthPolarStereo':
             return (self.plotGridNorthPolarStereo())
+        if plotProjection == 'SouthPolarStereo':
+            return (self.plotGridSouthPolarStereo())
         
         warnings.warn("Unable to plot this projection: %s" % (plotProjection))
         return (None, None)
 
+    def plotFailure(self):
+        '''Create Blank Plot to signal plotting failure. This signals a problem within the user specifications in relation to code capabilities.  '''
+        
+        f = self.newFigure()
+        central_longitude = self.getPlotParameter('lon_0', subKey='projection', default=0.0)
+        central_latitude = self.getPlotParameter('lat_0', subKey='projection', default=90.0)
+        satellite_height = self.getPlotParameter('satellite_height', default=35785831)
+        crs = cartopy.crs.NearsidePerspective(central_longitude=central_longitude, central_latitude=central_latitude, satellite_height=satellite_height)
+        ax = f.subplots(subplot_kw={'projection': crs})
+        if self.usePaneMatplotlib:
+            FigureCanvas(f)
+        mapExtent = self.getPlotParameter('extent', default=[])
+        mapCRS = self.getPlotParameter('extentCRS', default=cartopy.crs.PlateCarree())
+        ax.set_global()
+        ax.coastlines()
+        ax.gridlines()
+        ax.set_title("Plot Failure", color='red')
+        ax.text(0.5, 0.4, 'please check plot/grid parameters and retry', transform=ax.transAxes,
+                fontsize=10, color='red', alpha=0.2,
+                ha='center', va='center', rotation='0')
+        return f, ax
+    
+    def plotFirstPlot(self):
+        ''' Plot the initial image upon loading up the application. This is developed to differentiate between plot failure and the first plot.'''
+        f = self.newFigure()
+        satellite_height = self.getPlotParameter('satellite_height', default=35785831)
+        crs = cartopy.crs.NearsidePerspective(central_longitude=290, central_latitude=30, satellite_height=satellite_height)
+        ax = f.subplots(subplot_kw={'projection': crs})
+        if self.usePaneMatplotlib:
+            FigureCanvas(f)
+        mapExtent = self.getPlotParameter('extent', default=[])
+        mapCRS = self.getPlotParameter('extentCRS', default=cartopy.crs.PlateCarree())
+        ax.set_global()
+        ax.stock_img()
+        ax.coastlines()
+        ax.gridlines()
+        ax.set_title("Welcome! Please specify your grid and plot parameters")
+
+        return f, ax
+    
+    
     def plotGridLambertConformalConic(self):
         '''Plot a given mesh using Lambert Conformal Conic projection.'''
         '''Requires: central_latitude, central_longitude and two standard parallels (latitude).'''
@@ -604,6 +633,7 @@ class GridUtils:
         
         return f, ax
 
+    
     def plotGridMercator(self):
         '''Plot a given mesh using Mercator projection.'''
         f = self.newFigure()
@@ -723,6 +753,43 @@ class GridUtils:
                 
         return f, ax
         
+    def plotGridSouthPolarStereo(self):
+        '''Generic plotting function for South Polar Stereo maps'''
+        f = self.newFigure()
+        central_longitude = self.getPlotParameter('lon_0', subKey='projection', default=0.0)
+        true_scale_latitude = self.getPlotParameter('lat_ts', subKey='projection', default=-75.0)
+        crs = cartopy.crs.SouthPolarStereo(central_longitude=central_longitude, true_scale_latitude=true_scale_latitude)
+        ax = f.subplots(subplot_kw={'projection': crs})
+        mapExtent = self.getPlotParameter('extent', default=[])
+        mapCRS = self.getPlotParameter('extentCRS', default=cartopy.crs.PlateCarree())
+        if len(mapExtent) == 0:
+            ax.set_global()
+        else:
+            ax.set_extent(mapExtent, crs=mapCRS)
+        ax.stock_img()
+        ax.coastlines()
+        ax.gridlines()
+        title = self.getPlotParameter('title', default=None)
+        if title:
+            ax.set_title(title)
+        nj = self.grid.dims['nyp']
+        ni = self.grid.dims['nxp']
+        plotAllVertices = self.getPlotParameter('showGridCells', default=False)
+        iColor = self.getPlotParameter('iColor', default='k')
+        jColor = self.getPlotParameter('jColor', default='k')
+        transform = self.getPlotParameter('transform', default=cartopy.crs.Geodetic())
+        iLinewidth = self.getPlotParameter('iLinewidth', default=1.0)
+        jLinewidth = self.getPlotParameter('jLinewidth', default=1.0)
+        
+        # plot vertices
+        for i in range(0,ni+1,2):
+            if (i == 0 or i == (ni-1)) or plotAllVertices:
+                ax.plot(self.grid['x'][:,i], self.grid['y'][:,i], iColor, linewidth=iLinewidth, transform=transform)
+        for j in range(0,nj+1,2):
+            if (j == 0 or j == (nj-1)) or plotAllVertices:
+                ax.plot(self.grid['x'][j,:], self.grid['y'][j,:], jColor, linewidth=jLinewidth, transform=transform) 
+                
+        return f, ax
     # Grid parameter operations
 
     def clearGridParameters(self):
