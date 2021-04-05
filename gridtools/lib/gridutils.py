@@ -547,46 +547,6 @@ class GridUtils:
         
         warnings.warn("Unable to plot this projection: %s" % (plotProjection))
         return (None, None)
-
-    def plotFailure(self):
-        '''Create Blank Plot to signal plotting failure. This signals a problem within the user specifications in relation to code capabilities.  '''
-        
-        f = self.newFigure()
-        central_longitude = self.getPlotParameter('lon_0', subKey='projection', default=0.0)
-        central_latitude = self.getPlotParameter('lat_0', subKey='projection', default=90.0)
-        satellite_height = self.getPlotParameter('satellite_height', default=35785831)
-        crs = cartopy.crs.NearsidePerspective(central_longitude=central_longitude, central_latitude=central_latitude, satellite_height=satellite_height)
-        ax = f.subplots(subplot_kw={'projection': crs})
-        if self.usePaneMatplotlib:
-            FigureCanvas(f)
-        mapExtent = self.getPlotParameter('extent', default=[])
-        mapCRS = self.getPlotParameter('extentCRS', default=cartopy.crs.PlateCarree())
-        ax.set_global()
-        ax.coastlines()
-        ax.gridlines()
-        ax.set_title("Plot Failure", color='red')
-        ax.text(0.5, 0.4, 'please check plot/grid parameters and retry', transform=ax.transAxes,
-                fontsize=10, color='red', alpha=0.2,
-                ha='center', va='center', rotation='0')
-        return f, ax
-    
-    def plotFirstPlot(self):
-        ''' Plot the initial image upon loading up the application. This is developed to differentiate between plot failure and the first plot.'''
-        f = self.newFigure()
-        satellite_height = self.getPlotParameter('satellite_height', default=35785831)
-        crs = cartopy.crs.NearsidePerspective(central_longitude=290, central_latitude=30, satellite_height=satellite_height)
-        ax = f.subplots(subplot_kw={'projection': crs})
-        if self.usePaneMatplotlib:
-            FigureCanvas(f)
-        mapExtent = self.getPlotParameter('extent', default=[])
-        mapCRS = self.getPlotParameter('extentCRS', default=cartopy.crs.PlateCarree())
-        ax.set_global()
-        ax.stock_img()
-        ax.coastlines()
-        ax.gridlines()
-        ax.set_title("Welcome! Please specify your grid and plot parameters")
-
-        return f, ax
     
     
     def plotGridLambertConformalConic(self):
