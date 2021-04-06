@@ -502,16 +502,18 @@ class GridUtils:
         
         return fig
     
+    # insert plotGrid.ipynb here
+    
     def plotGrid(self):
         '''Perform a plot operation.
-        
+
         :return: Returns a tuple of matplotlib objects (figure, axes)
         :rtype: tuple
-        
+
         To plot a grid, you first must have the projection set.
-        
+
         :Example:
-        
+
         >>> grd = gridUtils()
         >>> grd.setPlotParameters(
                 {
@@ -522,127 +524,45 @@ class GridUtils:
                     },
         >>> grd.plotGrid()
         '''
-        
+
         #if not('shape' in self.gridInfo.keys()):
         #    warnings.warn("Unable to plot the grid.  Missing its 'shape'.")
         #    return (None, None)
-        
+
         plotProjection = self.getPlotParameter('name', subKey='projection', default=None)
-        
+
         if not(plotProjection):
             warnings.warn("Please set the plot 'projection' parameter 'name'")
             help(self.plotGrid)
             return (None, None)
-        
-        if plotProjection == 'LambertConformalConic':
-            return (self.plotGridLambertConformalConic())
-        if plotProjection == 'Mercator':
-            return (self.plotGridMercator())
-        if plotProjection == 'NearsidePerspective':
-            return (self.plotGridNearsidePerspective())
-        if plotProjection == 'NorthPolarStereo':
-            return (self.plotGridNorthPolarStereo())
-        if plotProjection == 'SouthPolarStereo':
-            return (self.plotGridSouthPolarStereo())
-        
-        warnings.warn("Unable to plot this projection: %s" % (plotProjection))
-        return (None, None)
-    
-    
-    def plotGridLambertConformalConic(self):
-        '''Plot a given mesh using Lambert Conformal Conic projection.'''
-        '''Requires: central_latitude, central_longitude and two standard parallels (latitude).'''
+
+        # initiate new plot, infer projection within the plotting procedure
         f = self.newFigure()
-        central_longitude = self.getPlotParameter('lon_0', subKey='projection', default=-96.0)
+
+        # declare projection options - note that each projection uses a different combination of these parameters and rarely all are used for one projection
+        central_longitude = self.getPlotParameter('lon_0', subKey='projection', default=0.0)
         central_latitude = self.getPlotParameter('lat_0', subKey='projection', default=39.0)
         lat_1 = self.getPlotParameter('lat_1', subKey='projection', default=33.0)
         lat_2 = self.getPlotParameter('lat_2', subKey='projection', default=45.0)
         standard_parallels = (lat_1, lat_2)
-        crs = cartopy.crs.LambertConformal(
-                central_longitude=central_longitude, central_latitude=central_latitude,
-                standard_parallels=standard_parallels)
-        ax = f.subplots(subplot_kw={'projection': crs})
-        mapExtent = self.getPlotParameter('extent', default=[])
-        mapCRS = self.getPlotParameter('extentCRS', default=cartopy.crs.PlateCarree())
-        if len(mapExtent) == 0:
-            ax.set_global()
-        else:
-            ax.set_extent(mapExtent, crs=mapCRS)
-        ax.stock_img()
-        ax.coastlines()
-        ax.gridlines()
-        title = self.getPlotParameter('title', default=None)
-        if title:
-            ax.set_title(title)
-        nj = self.grid.dims['nyp']
-        ni = self.grid.dims['nxp']
-        plotAllVertices = self.getPlotParameter('showGridCells', default=False)
-        iColor = self.getPlotParameter('iColor', default='k')
-        jColor = self.getPlotParameter('jColor', default='k')
-        transform = self.getPlotParameter('transform', default=cartopy.crs.Geodetic())
-        iLinewidth = self.getPlotParameter('iLinewidth', default=1.0)
-        jLinewidth = self.getPlotParameter('jLinewidth', default=1.0)
-        
-        # plot vertices
-        for i in range(0,ni+1,2):
-            if (i == 0 or i == (ni-1)) or plotAllVertices:
-                ax.plot(self.grid['x'][:,i], self.grid['y'][:,i], iColor, linewidth=iLinewidth, transform=transform)
-        for j in range(0,nj+1,2):
-            if (j == 0 or j == (nj-1)) or plotAllVertices:
-                ax.plot(self.grid['x'][j,:], self.grid['y'][j,:], jColor, linewidth=jLinewidth, transform=transform)
-        
-        return f, ax
-
-    
-    def plotGridMercator(self):
-        '''Plot a given mesh using Mercator projection.'''
-        f = self.newFigure()
-        central_longitude = self.getPlotParameter('lon_0', subKey='projection', default=0.0)
-        crs = cartopy.crs.Mercator(
-                central_longitude=central_longitude)
-        ax = f.subplots(subplot_kw={'projection': crs})
-        mapExtent = self.getPlotParameter('extent', default=[])
-        mapCRS = self.getPlotParameter('extentCRS', default=cartopy.crs.PlateCarree())
-        if len(mapExtent) == 0:
-            ax.set_global()
-        else:
-            ax.set_extent(mapExtent, crs=mapCRS)
-        ax.stock_img()
-        ax.coastlines()
-        ax.gridlines()
-        title = self.getPlotParameter('title', default=None)
-        if title:
-            ax.set_title(title)
-        nj = self.grid.dims['nyp']
-        ni = self.grid.dims['nxp']
-        plotAllVertices = self.getPlotParameter('showGridCells', default=False)
-        iColor = self.getPlotParameter('iColor', default='k')
-        jColor = self.getPlotParameter('jColor', default='k')
-        transform = self.getPlotParameter('transform', default=cartopy.crs.Geodetic())
-        iLinewidth = self.getPlotParameter('iLinewidth', default=1.0)
-        jLinewidth = self.getPlotParameter('jLinewidth', default=1.0)
-        
-        # plotting vertices
-        # For a non conforming projection, we have to plot every line between the points of each grid box
-        for i in range(0,ni+1,2):
-            if (i == 0 or i == (ni-1)) or plotAllVertices:
-                ax.plot(self.grid['x'][:,i], self.grid['y'][:,i], iColor, linewidth=iLinewidth, transform=transform)
-        for j in range(0,nj+1,2):
-            if (j == 0 or j == (nj-1)) or plotAllVertices:
-                ax.plot(self.grid['x'][j,:], self.grid['y'][j,:], jColor, linewidth=jLinewidth, transform=transform)
-                
-        return f, ax
-    
-    def plotGridNearsidePerspective(self):
-        """Plot a given mesh using the nearside perspective centered at (central_longitude,central_latitude)"""
-        f = self.newFigure()
-        central_longitude = self.getPlotParameter('lon_0', subKey='projection', default=0.0)
-        central_latitude = self.getPlotParameter('lat_0', subKey='projection', default=90.0)
         satellite_height = self.getPlotParameter('satellite_height', default=35785831)
-        crs = cartopy.crs.NearsidePerspective(central_longitude=central_longitude, central_latitude=central_latitude, satellite_height=satellite_height)
+        true_scale_latitude = self.getPlotParameter('lat_ts', subKey='projection', default=75.0)
+
+        # declare varying crs based on plotProjection
+        if plotProjection == 'LambertConformalConic':
+            crs = cartopy.crs.LambertConformal(
+            central_longitude=central_longitude, central_latitude=central_latitude,
+            standard_parallels=standard_parallels)
+        if plotProjection == 'Mercator':
+            crs = cartopy.crs.Mercator(central_longitude=central_longitude)
+        if plotProjection == 'NearsidePerspective':
+            crs = cartopy.crs.NearsidePerspective(central_longitude=central_longitude, central_latitude=central_latitude, satellite_height=satellite_height)
+        if plotProjection == 'NorthPolarStereo':
+            crs = cartopy.crs.NorthPolarStereo(central_longitude=central_longitude, true_scale_latitude=true_scale_latitude)
+        if plotProjection == 'SouthPolarStereo':
+            crs = cartopy.crs.SouthPolarStereo(central_longitude=central_longitude, true_scale_latitude=true_scale_latitude)
+
         ax = f.subplots(subplot_kw={'projection': crs})
-        if self.usePaneMatplotlib:
-            FigureCanvas(f)
         mapExtent = self.getPlotParameter('extent', default=[])
         mapCRS = self.getPlotParameter('extentCRS', default=cartopy.crs.PlateCarree())
         if len(mapExtent) == 0:
@@ -663,93 +583,22 @@ class GridUtils:
         transform = self.getPlotParameter('transform', default=cartopy.crs.Geodetic())
         iLinewidth = self.getPlotParameter('iLinewidth', default=1.0)
         jLinewidth = self.getPlotParameter('jLinewidth', default=1.0)
-        
+
         # plotting vertices
         # For a non conforming projection, we have to plot every line between the points of each grid box
         for i in range(0,ni+1,2):
             if (i == 0 or i == (ni-1)) or plotAllVertices:
-                ax.plot(self.grid.x[:,i], self.grid.y[:,i], iColor, linewidth=iLinewidth, transform=transform)
-        for j in range(0,nj+1,2):
-            if (j == 0 or j == (nj-1)) or plotAllVertices:
-                ax.plot(self.grid.x[j,:], self.grid.y[j,:], jColor, linewidth=jLinewidth, transform=transform)
-                
-        return f, ax
-        
-    def plotGridNorthPolarStereo(self):
-        '''Generic plotting function for North Polar Stereo maps'''
-        f = self.newFigure()
-        central_longitude = self.getPlotParameter('lon_0', subKey='projection', default=0.0)
-        true_scale_latitude = self.getPlotParameter('lat_ts', subKey='projection', default=75.0)
-        crs = cartopy.crs.NorthPolarStereo(central_longitude=central_longitude, true_scale_latitude=true_scale_latitude)
-        ax = f.subplots(subplot_kw={'projection': crs})
-        mapExtent = self.getPlotParameter('extent', default=[])
-        mapCRS = self.getPlotParameter('extentCRS', default=cartopy.crs.PlateCarree())
-        if len(mapExtent) == 0:
-            ax.set_global()
-        else:
-            ax.set_extent(mapExtent, crs=mapCRS)
-        ax.stock_img()
-        ax.coastlines()
-        ax.gridlines()
-        title = self.getPlotParameter('title', default=None)
-        if title:
-            ax.set_title(title)
-        nj = self.grid.dims['nyp']
-        ni = self.grid.dims['nxp']
-        plotAllVertices = self.getPlotParameter('showGridCells', default=False)
-        iColor = self.getPlotParameter('iColor', default='k')
-        jColor = self.getPlotParameter('jColor', default='k')
-        transform = self.getPlotParameter('transform', default=cartopy.crs.Geodetic())
-        iLinewidth = self.getPlotParameter('iLinewidth', default=1.0)
-        jLinewidth = self.getPlotParameter('jLinewidth', default=1.0)
-        
-        # plot vertices
-        for i in range(0,ni+1,2):
-            if (i == 0 or i == (ni-1)) or plotAllVertices:
                 ax.plot(self.grid['x'][:,i], self.grid['y'][:,i], iColor, linewidth=iLinewidth, transform=transform)
         for j in range(0,nj+1,2):
             if (j == 0 or j == (nj-1)) or plotAllVertices:
-                ax.plot(self.grid['x'][j,:], self.grid['y'][j,:], jColor, linewidth=jLinewidth, transform=transform) 
-                
+                ax.plot(self.grid['x'][j,:], self.grid['y'][j,:], jColor, linewidth=jLinewidth, transform=transform)
+
+        warnings.warn("Unable to plot this projection: %s" % (plotProjection))
         return f, ax
-        
-    def plotGridSouthPolarStereo(self):
-        '''Generic plotting function for South Polar Stereo maps'''
-        f = self.newFigure()
-        central_longitude = self.getPlotParameter('lon_0', subKey='projection', default=0.0)
-        true_scale_latitude = self.getPlotParameter('lat_ts', subKey='projection', default=-75.0)
-        crs = cartopy.crs.SouthPolarStereo(central_longitude=central_longitude, true_scale_latitude=true_scale_latitude)
-        ax = f.subplots(subplot_kw={'projection': crs})
-        mapExtent = self.getPlotParameter('extent', default=[])
-        mapCRS = self.getPlotParameter('extentCRS', default=cartopy.crs.PlateCarree())
-        if len(mapExtent) == 0:
-            ax.set_global()
-        else:
-            ax.set_extent(mapExtent, crs=mapCRS)
-        ax.stock_img()
-        ax.coastlines()
-        ax.gridlines()
-        title = self.getPlotParameter('title', default=None)
-        if title:
-            ax.set_title(title)
-        nj = self.grid.dims['nyp']
-        ni = self.grid.dims['nxp']
-        plotAllVertices = self.getPlotParameter('showGridCells', default=False)
-        iColor = self.getPlotParameter('iColor', default='k')
-        jColor = self.getPlotParameter('jColor', default='k')
-        transform = self.getPlotParameter('transform', default=cartopy.crs.Geodetic())
-        iLinewidth = self.getPlotParameter('iLinewidth', default=1.0)
-        jLinewidth = self.getPlotParameter('jLinewidth', default=1.0)
-        
-        # plot vertices
-        for i in range(0,ni+1,2):
-            if (i == 0 or i == (ni-1)) or plotAllVertices:
-                ax.plot(self.grid['x'][:,i], self.grid['y'][:,i], iColor, linewidth=iLinewidth, transform=transform)
-        for j in range(0,nj+1,2):
-            if (j == 0 or j == (nj-1)) or plotAllVertices:
-                ax.plot(self.grid['x'][j,:], self.grid['y'][j,:], jColor, linewidth=jLinewidth, transform=transform) 
-                
-        return f, ax
+    
+
+
+
     # Grid parameter operations
 
     def clearGridParameters(self):
