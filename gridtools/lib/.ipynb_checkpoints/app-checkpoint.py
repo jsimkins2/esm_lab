@@ -80,8 +80,6 @@ class App:
         self.initializeWidgets()
         self.initializeTabs()
         self.initializeDashboard()
-        self.initializePlot()
-        
 
     # Panel application functions
 
@@ -181,60 +179,56 @@ class App:
 
         return
 
-    def make_plot(self, event):
-        statusWidget.value = "Running make_plot()"
+    def make_plot(self):
+        self.statusWidget.value = "Running make_plot()"
 
-        if plotTitle.value != "":
+        if self.plotTitle.value != "":
             mp_title = plotTitle.value
         else:
-            selectedProjection = plotProjection.value
-            mp_title = "%s: " % (selectedProjection) + str(dx.value) + "x" + str(dy.value) + " with " + str(gtilt.value) + " degree tilt"
+            selectedProjection = self.plotProjection.value
+            mp_title = "%s: " % (selectedProjection) + str(self.dx.value) + "x" + str(self.dy.value) + " with " + str(self.gtilt.value) + " degree tilt"
 
         # Check plotGridMode.value to set plot parameter showGridCells
         showGridCellsState = False
-        pGridMode = plotGridModeDict[plotGridMode.value]
+        pGridMode = self.plotGridModeDict[self.plotGridMode.value]
         if pGridMode == 'gridCells':
             showGridCellsState = True
 
         # Determine plot extent (this may vary depending on selected projection)
         plotExtentState = []
         # If we are not using the global projection, use the user supplied extents
-        if not(plotUseGlobal.value):
-            x0pt = plotExtentX0.value
-            x1pt = plotExtentX1.value
-            y0pt = plotExtentY0.value
-            y1pt = plotExtentY1.value
+        if not(self.plotUseGlobal.value):
+            x0pt = self.plotExtentX0.value
+            x1pt = self.plotExtentX1.value
+            y0pt = self.plotExtentY0.value
+            y1pt = self.plotExtentY1.value
 
             plotExtentState = [x0pt, x1pt, y0pt, y1pt]
 
         # These inputs will have to change based on selected projection
-        grd.setPlotParameters(
+        self.grd.setPlotParameters(
             {
-                'figsize': defaultPlotFigureSize,
+                'figsize': self.defaultPlotFigureSize,
                 'projection' : {
-                    'name': plotProjectionsDict[plotProjection.value],
-                    'lat_0': float(plat0.value),
-                    'lon_0': float(plon0.value)
+                    'name': self.plotProjectionsDict[self.plotProjection.value],
+                    'lat_0': float(self.plat0.value),
+                    'lon_0': float(self.plon0.value)
                 },
                 'extent': plotExtentState,
-                'iLinewidth': plotXLineWidth.value,
-                'jLinewidth': plotYLineWidth.value,
+                'iLinewidth': self.plotXLineWidth.value,
+                'jLinewidth': self.plotYLineWidth.value,
                 'showGridCells': showGridCellsState,
                 'title': mp_title,
-                'iColor': plotColorDict[plotXColor.value],
-                'jColor': plotColorDict[plotYColor.value]
+                'iColor': self.plotColorDict[self.plotXColor.value],
+                'jColor': self.plotColorDict[self.plotYColor.value]
             }
         )
-        if grd.xrOpen:
-            (figure, axes) = grd.plotGrid()
-            statusWidget.value = "Running make_plot(): done"     
+        if self.grd.xrOpen:
+            (figure, axes) = self.grd.plotGrid()
+            self.statusWidget.value = "Running make_plot(): done"     
         else:
-            if firstPlot==False:
-                (figure, axes) = self.errorFigure()
-                statusWidget.value = "Running make_plot(): plotting failure"
-            else:
-                (figure, axes) = self.initializePlot()
-                statusWidget.value = "Loading App: done"
+            (figure, axes) = self.errorFigure()
+            self.statusWidget.value = "Running make_plot(): plotting failure"
 
         return figure
 
@@ -248,7 +242,7 @@ class App:
         satellite_height = self.grd.getPlotParameter('satellite_height', default=35785831)
         crs = cartopy.crs.NearsidePerspective(central_longitude=central_longitude, central_latitude=central_latitude, satellite_height=satellite_height)
         ax = f.subplots(subplot_kw={'projection': crs})
-        if self.usePaneMatplotlib:
+        if self.grd.usePaneMatplotlib:
             FigureCanvas(f)
         mapExtent = self.grd.getPlotParameter('extent', default=[])
         mapCRS = self.grd.getPlotParameter('extentCRS', default=cartopy.crs.PlateCarree())
@@ -267,7 +261,7 @@ class App:
         satellite_height = self.grd.getPlotParameter('satellite_height', default=35785831)
         crs = cartopy.crs.NearsidePerspective(central_longitude=290, central_latitude=30, satellite_height=satellite_height)
         ax = f.subplots(subplot_kw={'projection': crs})
-        if self.usePaneMatplotlib:
+        if self.grd.usePaneMatplotlib:
             FigureCanvas(f)
         mapExtent = self.grd.getPlotParameter('extent', default=[])
         mapCRS = self.grd.getPlotParameter('extentCRS', default=cartopy.crs.PlateCarree())
@@ -277,7 +271,7 @@ class App:
         ax.gridlines()
         ax.set_title("Welcome! Please specify your grid and plot parameters")
 
-        return f, ax
+        return f
     
     def plotRefresh(self, event):
         self.plotWindow.object = self.make_plot()
@@ -436,7 +430,7 @@ class App:
 
         # The plot itself wrapped in a widget
         # Use panel.pane.Matplotlib(matplotlib.figure)
-        self.plotWindow = pn.pane.Matplotlib(self.make_plot(), width=self.plotWidgetWidth, height=self.plotWidgetHeight)
+        self.plotWindow = pn.pane.Matplotlib(self.initializePlot(), width=self.plotWidgetWidth, height=self.plotWidgetHeight)
 
         # This presents a data view summary of the xarray object
         self.dataView = pn.Column(self.grd.grid, width=self.plotWidgetWidth)
