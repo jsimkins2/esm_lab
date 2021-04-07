@@ -1,11 +1,3 @@
-# Credits
-#
-# James Simkins
-# Rob Cermak
-# Niki Zadeh
-# Alistair Adcroft
-# Raphael Dussin
-
 # General imports and definitions
 import os, sys
 import cartopy
@@ -23,7 +15,7 @@ from matplotlib.backends.backend_agg import FigureCanvas
 # Required for:
 #  * ROMS to MOM6 grid conversion
 #  * Computation of MOM6 grid metrics
-import Spherical
+import spherical
 
 # GridUtils() application
 from app import App
