@@ -190,29 +190,132 @@ class GridUtils:
         self.grid.area.attrs['units'] = 'meters^2'
 
         return
-        
+   
+
+
+
     def makeGrid(self):
         '''Using supplied grid parameters, populate a grid in memory.'''
 
         # Make a grid in the Mercator projection
-        if self.gridInfo['gridParameters']['projection']['name'] == "Mercator":
+        if self.gridInfo['gridParameters']['projection']['name'] == "Mercator":      
+            if 'tilt' in self.gridInfo['gridParameters'].keys():
+                tilt = self.gridInfo['gridParameters']['tilt']
+            else:
+                tilt = 0.0
+
+            lonGrid, latGrid = self.generate_regional_spherical(
+                self.gridInfo['gridParameters']['projection']['lon_0'], self.gridInfo['gridParameters']['dx'],
+                0, # lat0 is 0 in mercator projection?
+                self.gridInfo['gridParameters']['dy'],
+                tilt,
+                self.gridInfo['gridParameters']['gridResolution'] * self.gridInfo['gridParameters']['gridMode']
+            )
+
+            (nxp, nyp) = lonGrid.shape
+
+            self.grid['x'] = (('nyp','nxp'), lonGrid)
+            self.grid.x.attrs['units'] = 'degrees_east'
+            self.grid['y'] = (('nyp','nxp'), latGrid)
+            self.grid.y.attrs['units'] = 'degrees_north'
+
+            # This technique seems to return a Lambert Conformal Projection with the following properties
+            # This only works if the grid does not overlap a polar point
+            # (lat_0 - (dy/2), lat_0 + (dy/2))
+            #self.gridInfo['gridParameters']['projection']['lat_1'] =\
+               # self.gridInfo['gridParameters']['projection']['lat_0'] - (self.gridInfo['gridParameters']['dy'] / 2.0)
+            #self.gridInfo['gridParameters']['projection']['lat_2'] =\
+              #  self.gridInfo['gridParameters']['projection']['lat_0'] + (self.gridInfo['gridParameters']['dy'] / 2.0)
             self.gridInfo['gridParameters']['projection']['proj'] =\
                     "+ellps=WGS84 +proj=merc +lon_0=%s +x_0=0.0 +y_0=0.0 +units=m +no_defs" %\
                         (self.gridInfo['gridParameters']['projection']['lon_0'])
 
+            # Declare the xarray dataset open even though it is really only in memory at this point
+            self.xrOpen = True
+
+            # Compute grid metrics
+            self.computeGridMetrics()
+
+
         # Make a grid in the North Polar Stereo projection
         if self.gridInfo['gridParameters']['projection']['name'] == "NorthPolarStereo":
+            if 'tilt' in self.gridInfo['gridParameters'].keys():
+                tilt = self.gridInfo['gridParameters']['tilt']
+            else:
+                tilt = 0.0
+
+            lonGrid, latGrid = self.generate_regional_spherical(
+                self.gridInfo['gridParameters']['projection']['lon_0'], self.gridInfo['gridParameters']['dx'],
+                self.gridInfo['gridParameters']['projection']['lat_0'], self.gridInfo['gridParameters']['dy'],
+                tilt,
+                self.gridInfo['gridParameters']['gridResolution'] * self.gridInfo['gridParameters']['gridMode']
+            )
+
+            (nxp, nyp) = lonGrid.shape
+
+            self.grid['x'] = (('nyp','nxp'), lonGrid)
+            self.grid.x.attrs['units'] = 'degrees_east'
+            self.grid['y'] = (('nyp','nxp'), latGrid)
+            self.grid.y.attrs['units'] = 'degrees_north'
+
+            # This technique seems to return a Lambert Conformal Projection with the following properties
+            # This only works if the grid does not overlap a polar point
+            # (lat_0 - (dy/2), lat_0 + (dy/2))
+            #self.gridInfo['gridParameters']['projection']['lat_1'] =\
+                #self.gridInfo['gridParameters']['projection']['lat_0'] - (self.gridInfo['gridParameters']['dy'] / 2.0)
+            #self.gridInfo['gridParameters']['projection']['lat_2'] =\
+               # self.gridInfo['gridParameters']['projection']['lat_0'] + (self.gridInfo['gridParameters']['dy'] / 2.0)
             self.gridInfo['gridParameters']['projection']['proj'] =\
                     "+ellps=WGS84 +proj=stere +lat_0=%s +lon_0=%s  +x_0=0.0 +y_0=0.0 +no_defs" %\
                         (self.gridInfo['gridParameters']['projection']['lat_0'],
                         self.gridInfo['gridParameters']['projection']['lon_0'])
 
+            # Declare the xarray dataset open even though it is really only in memory at this point
+            self.xrOpen = True
+
+            # Compute grid metrics
+            self.computeGridMetrics()
+
+
         # Make a grid in the South Polar Stereo projection
         if self.gridInfo['gridParameters']['projection']['name'] == "SouthPolarStereo":
+            if 'tilt' in self.gridInfo['gridParameters'].keys():
+                tilt = self.gridInfo['gridParameters']['tilt']
+            else:
+                tilt = 0.0
+
+            lonGrid, latGrid = self.generate_regional_spherical(
+                self.gridInfo['gridParameters']['projection']['lon_0'], self.gridInfo['gridParameters']['dx'],
+                self.gridInfo['gridParameters']['projection']['lat_0'], self.gridInfo['gridParameters']['dy'],
+                tilt,
+                self.gridInfo['gridParameters']['gridResolution'] * self.gridInfo['gridParameters']['gridMode']
+            )
+
+            (nxp, nyp) = lonGrid.shape
+
+            self.grid['x'] = (('nyp','nxp'), lonGrid)
+            self.grid.x.attrs['units'] = 'degrees_east'
+            self.grid['y'] = (('nyp','nxp'), latGrid)
+            self.grid.y.attrs['units'] = 'degrees_north'
+
+            # This technique seems to return a Lambert Conformal Projection with the following properties
+            # This only works if the grid does not overlap a polar point
+            # (lat_0 - (dy/2), lat_0 + (dy/2))
+            #self.gridInfo['gridParameters']['projection']['lat_1'] =\
+                #self.gridInfo['gridParameters']['projection']['lat_0'] - (self.gridInfo['gridParameters']['dy'] / 2.0)
+            #self.gridInfo['gridParameters']['projection']['lat_2'] =\
+                #self.gridInfo['gridParameters']['projection']['lat_0'] + (self.gridInfo['gridParameters']['dy'] / 2.0)
             self.gridInfo['gridParameters']['projection']['proj'] =\
-                    "+ellps=WGS84 +proj=stere +lat_0=%s +lon_0=%s +x_0=0.0 +y_0=0.0 +no_defs" %\
+                    "+ellps=WGS84 +proj=stere +lat_0=%s +lon_0=%s  +x_0=0.0 +y_0=0.0 +no_defs" %\
                         (self.gridInfo['gridParameters']['projection']['lat_0'],
                         self.gridInfo['gridParameters']['projection']['lon_0'])
+
+            # Declare the xarray dataset open even though it is really only in memory at this point
+            self.xrOpen = True
+
+            # Compute grid metrics
+            self.computeGridMetrics()
+
 
         # Make a grid in the Lambert Conformal Conic projection
         if self.gridInfo['gridParameters']['projection']['name'] == 'LambertConformalConic':
@@ -221,15 +324,16 @@ class GridUtils:
                 tilt = self.gridInfo['gridParameters']['tilt']
             else:
                 tilt = 0.0
+
             lonGrid, latGrid = self.generate_regional_spherical(
                 self.gridInfo['gridParameters']['projection']['lon_0'], self.gridInfo['gridParameters']['dx'],
                 self.gridInfo['gridParameters']['projection']['lat_0'], self.gridInfo['gridParameters']['dy'],
                 tilt,
                 self.gridInfo['gridParameters']['gridResolution'] * self.gridInfo['gridParameters']['gridMode']
             )
-            
+
             (nxp, nyp) = lonGrid.shape
-            
+
             self.grid['x'] = (('nyp','nxp'), lonGrid)
             self.grid.x.attrs['units'] = 'degrees_east'
             self.grid['y'] = (('nyp','nxp'), latGrid)
@@ -251,9 +355,11 @@ class GridUtils:
 
             # Declare the xarray dataset open even though it is really only in memory at this point
             self.xrOpen = True
-            
+
             # Compute grid metrics
             self.computeGridMetrics()
+       
+
     
     # Original functions provided by Niki Zadeh - Lambert Conformal Conic grids
     # Grid creation and rotation in spherical coordinates
