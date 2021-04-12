@@ -29,6 +29,7 @@ class App:
         # Default filenames
         self.defaultGridFilename = 'gridFile.nc'
         self.defaultLogFilename = 'logFile.log'
+        self.defaultPlotTitle = ''
 
         # How we grow the grid from the specified latitude (lat0) or longitude (lon0)
         # TODO: If 'Center' is not chosen then the controls for Central Latitude and Central Longitude no longer make sense.
@@ -220,7 +221,7 @@ class App:
         self.grd.printMsg(msg, logging.INFO)
 
         if self.plotTitle.value != "":
-            mp_title = plotTitle.value
+            mp_title = self.plotTitle.value
         else:
             selectedProjection = self.plotProjection.value
             mp_title = "%s: " % (selectedProjection) + str(self.dx.value) + "x" + str(self.dy.value) + " with " + str(self.gtilt.value) + " degree tilt"
