@@ -162,6 +162,7 @@ dependencies:
   - ptyprocess=0.6.0=py_1001
   - py=1.10.0=pyhd3deb0d_0
   - pycparser=2.20=pyh9f0ad1d_2
+  - pycrs=1.0.2=py_0
   - pyct=0.4.6=py_0
   - pyct-core=0.4.6=py_0
   - pydap=3.2.2=pyh9f0ad1d_1001
