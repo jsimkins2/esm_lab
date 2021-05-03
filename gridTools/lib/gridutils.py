@@ -1,11 +1,9 @@
 # General imports and definitions
-import os, sys
-import cartopy
+import os, sys, datetime, logging
+import cartopy, warnings, pdb
 import numpy as np
 import xarray as xr
-import warnings
-import pdb
-import logging
+from pyproj import CRS
 
 # Needed for panel.pane                
 from matplotlib.figure import Figure
@@ -26,11 +24,12 @@ class GridUtils:
     def __init__(self, app={}):
         # Constants
         self.PI_180 = np.pi/180.
-        self._default_Re = 6.378e6
+        # Adopt GRS80 ellipse from proj
+        self._default_Re = 6.378137e6
+        self._default_ellps = 'GRS80'
         
         # File pointer
         self.xrOpen = False
-        self.xrFilename = None
         self.xrDS = xr.Dataset()
         self.grid = self.xrDS
         # Internal parameters
@@ -143,13 +142,10 @@ class GridUtils:
         activating pdb breakpoints.  NOTE: pdb breakpoints tend not to
         work very well when running under the application.  It tends to
         terminate the bokeh/tornado server.
-
         The debug level can be zero(0) and you can forcibly add a break
         point in the code by using `debugMsg(msg, level=3)` anywhere in
         the code.
-
         .. note::
-
             Currently defined debug levels:
                 0=off 
                 1=log debugging messages
@@ -241,9 +237,36 @@ class GridUtils:
         levels.'''
         return self.msgLogLevel
 
+    def getRadius(self, param):
+        '''Return a radius based on projection string.  If parsing the projection string
+        fails, the radius from GRS80/WGS84 is used.'''
+
+        # GRS80/WGS84
+        radiusVal = self._default_Re
+
+        if 'projection' in param:
+            if 'proj' in param['projection']:
+                try:
+                    crs = CRS.from_proj4(param['projection']['proj'])
+                    radiusVal = crs.ellipsoid.semi_major_metre
+                except:
+                    msg = "WARNING: Using default ellipsoid.  Projection string was not used."
+                    self.printMsg(msg, level=logging.WARNING)
+                    self.debugMsg(msg)
+                    pass
+
+        return radiusVal
+
     def getVerboseLevel(self):
         '''Get the current verbose level for GridUtils()'''
         return self.verboseLevel
+
+    def getVersion(self):
+        '''Return the version number of this library'''
+
+        softwareRevision = "0.1"
+
+        return softwareRevision
 
     def printMsg(self, msg, level = logging.INFO):
         '''
@@ -294,7 +317,6 @@ class GridUtils:
 
     def setDebugLevel(self, newLevel):
         '''Set a new debug level.
-
         :param newLevel: debug level to set or update
         :type newLevel: integer
         :return: none
@@ -304,7 +326,6 @@ class GridUtils:
             Areas of code that typically cause errors have try/except blocks.  Some of these
             have python debugging breakpoints that are active when the debug level is set
             to a positive number.        
-
             Currently defined debug levels:
                 0=off 
                 1=extra messages
@@ -316,7 +337,6 @@ class GridUtils:
     
     def setLogLevel(self, newLevel):
         '''Set a new verbose level.
-
         :param newLevel: verbose level to set or update
         :type newLevel: integer
         :return: none
@@ -333,7 +353,6 @@ class GridUtils:
     
     def setVerboseLevel(self, newLevel):
         '''Set a new verbose level.
-
         :param newLevel: verbose level to set or update
         :type newLevel: integer
         :return: none
@@ -348,9 +367,10 @@ class GridUtils:
     # Grid operations
     
     def clearGrid(self):
-        '''Call this when you want to erase the current grid and grid parameters.  This also
-        clobbers any current plot parameters.
-        Do not call this method between plots of the same grid.'''
+        '''Call this when you want to erase the current grid.  This also
+        clobbers any current grid and plot parameters.
+        Do not call this method between plots of the same grid in different
+        projections.'''
         
         # If there are file resources open, close them first.
         if self.xrOpen:
@@ -368,12 +388,24 @@ class GridUtils:
         '''Compute MOM6 grid metrics: angle_dx, dx, dy and area.'''
 
         self.grid.attrs['grid_version'] = "0.2"
-        self.grid.attrs['code_version'] = "GridTools: beta"
-        self.grid.attrs['history'] = "sometime: GridTools"
+        self.grid.attrs['code_version'] = "GridTools: %s" % (self.getVersion())
+        self.grid.attrs['history'] = "%s: create grid with python GridTools" % (datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"))
         self.grid.attrs['projection'] = self.gridInfo['gridParameters']['projection']['name']
-        self.grid.attrs['proj'] = self.gridInfo['gridParameters']['projection']['proj']
-        
-        R = 6370.e3 # Radius of sphere        
+        try:
+            self.grid.attrs['proj'] = self.gridInfo['gridParameters']['projection']['proj']
+        except:
+            projString = self.formProjString(self.gridInfo['gridParameters'])
+            if projString:
+                self.grid.attrs['proj'] = projString
+                self.gridInfo['gridParameters']['projection']['proj'] = projString
+            else:
+                msg = "WARNING: Projection string could not be determined from grid parameters."
+                self.printMsg(msg, level=logging.WARNING)
+
+        #R = 6370.e3 # Radius of sphere
+        # TODO: get ellipse setting
+        #R = self._default_Re
+        R = self.getRadius(self.gridInfo['gridParameters'])
 
         # Make a copy of the lon grid as values are changed for computation
         lon = self.grid.x.copy()
@@ -402,12 +434,61 @@ class GridUtils:
         self.grid.area.attrs['units'] = 'meters^2'
 
         return
+
+    def formProjString(self, param):
+        '''Create a projection string from parameter attributes.'''
+
+        projString = None
+
+        if 'projection' in param:
+            if 'name' in param['projection']:
+                if param['projection']['name'] == 'Mercator':
+                    projString = "+proj=merc +lon_0=%s +x_0=0.0 +y_0=0.0 +units=m %s +no_defs" %\
+                        (param['projection']['lon_0'])
+
+                if param['projection']['name'] in ['NorthPolarStereo', 'SouthPolarStereo']:
+                    projString = "+proj=stere +lat_0=%s +lon_0=%s +x_0=0.0 +y_0=0.0 +no_defs" %\
+                        (param['projection']['lat_0'],
+                        param['projection']['lon_0'])
+
+                if param['projection']['name'] == 'LambertConformalConic':
+                    projString = "+proj=lcc +lon_0=%s +lat_0=%s +x_0=0.0 +y_0=0.0 +lat_1=%s +lat_2=%s +no_defs" %\
+                        (param['projection']['lat_0'],
+                        param['projection']['lon_0'],
+                        param['projection']['lat_1'],
+                        param['projection']['lat_2'])
+
+                if projString:
+                    if 'ellps' in param['projection']:
+                        projString = "+ellps=%s %s" % (param['projection']['ellps'], projString)
+                    else:
+                        projString = "+ellps=%s %s" % (self._default_ellps, projString)
+                        msg = "WARNING: Using default ellipse (%s)." % (self._default_ellps)
+                        self.printMsg(msg, level=logging.WARNING)
+                    if 'R' in param['projection']:
+                        projString = "+R=%s %s" % (param['projection']['R'], projString)
+
+        if projString == None:
+            msg = "Unable to set projection string."
+            self.printMsg(msg, level=logging.WARNING)
+            self.debugMsg(msg)
+
+        return projString
    
-
-
-
     def makeGrid(self):
         '''Using supplied grid parameters, populate a grid in memory.'''
+
+        # Try to form projection string for future use
+        try:
+            projString = formProjString(self.gridInfo['gridParameters'])
+            if projString:
+                self.gridInfo['gridParameters']['projection']['proj'] = projString
+            else:
+                msg = "WARNING: Projection string could not be determined from grid parameters."
+                self.printMsg(msg, level=logging.WARNING)
+        except:
+            msg = "WARNING: Projection string could not be determined from grid parameters."
+            self.printMsg(msg, level=logging.WARNING)
 
         # Make a grid in the Mercator projection
         if self.gridInfo['gridParameters']['projection']['name'] == "Mercator":      
@@ -416,13 +497,22 @@ class GridUtils:
             else:
                 tilt = 0.0
 
-            lonGrid, latGrid = self.generate_regional_spherical(
+            # Tilt is not available for Mercator
+            if tilt > 0.0 or tilt < 0.0:
+                tilt = 0.0
+                msg = "WARNING: Tilt of a mercator grid is not supported.  Specified tilt has been ignored."
+                self.printMsg(msg, level=logging.WARNING)
+
+            lonGrid, latGrid = self.generate_regional_mercator(
                 self.gridInfo['gridParameters']['projection']['lon_0'], self.gridInfo['gridParameters']['dx'],
-                0, # lat0 is 0 in mercator projection?
+                self.gridInfo['gridParameters']['projection']['lat_0'],
                 self.gridInfo['gridParameters']['dy'],
                 tilt,
-                self.gridInfo['gridParameters']['gridResolution'] * self.gridInfo['gridParameters']['gridMode']
+                self.gridInfo['gridParameters']['gridResolution'], self.gridInfo['gridParameters']['gridMode']
             )
+              
+            # Adjust lonGrid to -180 to +180
+            lonGrid = np.where(lonGrid > 180.0, lonGrid - 360.0, lonGrid)
 
             (nxp, nyp) = lonGrid.shape
 
@@ -431,16 +521,9 @@ class GridUtils:
             self.grid['y'] = (('nyp','nxp'), latGrid)
             self.grid.y.attrs['units'] = 'degrees_north'
 
-            # This technique seems to return a Lambert Conformal Projection with the following properties
-            # This only works if the grid does not overlap a polar point
-            # (lat_0 - (dy/2), lat_0 + (dy/2))
-            #self.gridInfo['gridParameters']['projection']['lat_1'] =\
-               # self.gridInfo['gridParameters']['projection']['lat_0'] - (self.gridInfo['gridParameters']['dy'] / 2.0)
-            #self.gridInfo['gridParameters']['projection']['lat_2'] =\
-              #  self.gridInfo['gridParameters']['projection']['lat_0'] + (self.gridInfo['gridParameters']['dy'] / 2.0)
-            self.gridInfo['gridParameters']['projection']['proj'] =\
-                    "+ellps=WGS84 +proj=merc +lon_0=%s +x_0=0.0 +y_0=0.0 +units=m +no_defs" %\
-                        (self.gridInfo['gridParameters']['projection']['lon_0'])
+            #self.gridInfo['gridParameters']['projection']['proj'] =\
+            #        "+ellps=WGS84 +proj=merc +lon_0=%s +x_0=0.0 +y_0=0.0 +units=m +no_defs" %\
+            #            (self.gridInfo['gridParameters']['projection']['lon_0'])
 
             # Declare the xarray dataset open even though it is really only in memory at this point
             self.xrOpen = True
@@ -460,8 +543,10 @@ class GridUtils:
                 self.gridInfo['gridParameters']['projection']['lon_0'], self.gridInfo['gridParameters']['dx'],
                 self.gridInfo['gridParameters']['projection']['lat_0'], self.gridInfo['gridParameters']['dy'],
                 tilt,
-                self.gridInfo['gridParameters']['gridResolution'] * self.gridInfo['gridParameters']['gridMode']
+                self.gridInfo['gridParameters']['gridResolution'], self.gridInfo['gridParameters']['gridMode']
             )
+            # Adjust lonGrid to -180 to +180
+            lonGrid = np.where(lonGrid > 180.0, lonGrid - 360.0, lonGrid)
 
             (nxp, nyp) = lonGrid.shape
 
@@ -477,10 +562,10 @@ class GridUtils:
                 #self.gridInfo['gridParameters']['projection']['lat_0'] - (self.gridInfo['gridParameters']['dy'] / 2.0)
             #self.gridInfo['gridParameters']['projection']['lat_2'] =\
                # self.gridInfo['gridParameters']['projection']['lat_0'] + (self.gridInfo['gridParameters']['dy'] / 2.0)
-            self.gridInfo['gridParameters']['projection']['proj'] =\
-                    "+ellps=WGS84 +proj=stere +lat_0=%s +lon_0=%s  +x_0=0.0 +y_0=0.0 +no_defs" %\
-                        (self.gridInfo['gridParameters']['projection']['lat_0'],
-                        self.gridInfo['gridParameters']['projection']['lon_0'])
+            #self.gridInfo['gridParameters']['projection']['proj'] =\
+            #        "+ellps=WGS84 +proj=stere +lat_0=%s +lon_0=%s  +x_0=0.0 +y_0=0.0 +no_defs" %\
+            #            (self.gridInfo['gridParameters']['projection']['lat_0'],
+            #            self.gridInfo['gridParameters']['projection']['lon_0'])
 
             # Declare the xarray dataset open even though it is really only in memory at this point
             self.xrOpen = True
@@ -500,8 +585,10 @@ class GridUtils:
                 self.gridInfo['gridParameters']['projection']['lon_0'], self.gridInfo['gridParameters']['dx'],
                 self.gridInfo['gridParameters']['projection']['lat_0'], self.gridInfo['gridParameters']['dy'],
                 tilt,
-                self.gridInfo['gridParameters']['gridResolution'] * self.gridInfo['gridParameters']['gridMode']
+                self.gridInfo['gridParameters']['gridResolution'], self.gridInfo['gridParameters']['gridMode']
             )
+            # Adjust lonGrid to -180 to +180
+            lonGrid = np.where(lonGrid > 180.0, lonGrid - 360.0, lonGrid)
 
             (nxp, nyp) = lonGrid.shape
 
@@ -517,10 +604,10 @@ class GridUtils:
                 #self.gridInfo['gridParameters']['projection']['lat_0'] - (self.gridInfo['gridParameters']['dy'] / 2.0)
             #self.gridInfo['gridParameters']['projection']['lat_2'] =\
                 #self.gridInfo['gridParameters']['projection']['lat_0'] + (self.gridInfo['gridParameters']['dy'] / 2.0)
-            self.gridInfo['gridParameters']['projection']['proj'] =\
-                    "+ellps=WGS84 +proj=stere +lat_0=%s +lon_0=%s  +x_0=0.0 +y_0=0.0 +no_defs" %\
-                        (self.gridInfo['gridParameters']['projection']['lat_0'],
-                        self.gridInfo['gridParameters']['projection']['lon_0'])
+            #self.gridInfo['gridParameters']['projection']['proj'] =\
+            #        "+ellps=WGS84 +proj=stere +lat_0=%s +lon_0=%s  +x_0=0.0 +y_0=0.0 +no_defs" %\
+            #            (self.gridInfo['gridParameters']['projection']['lat_0'],
+            #            self.gridInfo['gridParameters']['projection']['lon_0'])
 
             # Declare the xarray dataset open even though it is really only in memory at this point
             self.xrOpen = True
@@ -541,8 +628,10 @@ class GridUtils:
                 self.gridInfo['gridParameters']['projection']['lon_0'], self.gridInfo['gridParameters']['dx'],
                 self.gridInfo['gridParameters']['projection']['lat_0'], self.gridInfo['gridParameters']['dy'],
                 tilt,
-                self.gridInfo['gridParameters']['gridResolution'] * self.gridInfo['gridParameters']['gridMode']
+                self.gridInfo['gridParameters']['gridResolution'], self.gridInfo['gridParameters']['gridMode']
             )
+            # Adjust lonGrid to -180 to +180
+            lonGrid = np.where(lonGrid > 180.0, lonGrid - 360.0, lonGrid)
 
             (nxp, nyp) = lonGrid.shape
 
@@ -558,21 +647,19 @@ class GridUtils:
                 self.gridInfo['gridParameters']['projection']['lat_0'] - (self.gridInfo['gridParameters']['dy'] / 2.0)
             self.gridInfo['gridParameters']['projection']['lat_2'] =\
                 self.gridInfo['gridParameters']['projection']['lat_0'] + (self.gridInfo['gridParameters']['dy'] / 2.0)
-            self.gridInfo['gridParameters']['projection']['proj'] =\
-                    "+ellps=WGS84 +proj=lcc +lon_0=%s +lat_0=%s +x_0=0.0 +y_0=0.0 +lat_1=%s +lat_2=%s +no_defs" %\
-                        (self.gridInfo['gridParameters']['projection']['lat_0'],
-                        self.gridInfo['gridParameters']['projection']['lon_0'],
-                        self.gridInfo['gridParameters']['projection']['lat_1'],
-                        self.gridInfo['gridParameters']['projection']['lat_2'])
+            #self.gridInfo['gridParameters']['projection']['proj'] =\
+            #        "+ellps=WGS84 +proj=lcc +lon_0=%s +lat_0=%s +x_0=0.0 +y_0=0.0 +lat_1=%s +lat_2=%s +no_defs" %\
+            #            (self.gridInfo['gridParameters']['projection']['lat_0'],
+            #            self.gridInfo['gridParameters']['projection']['lon_0'],
+            #            self.gridInfo['gridParameters']['projection']['lat_1'],
+            #            self.gridInfo['gridParameters']['projection']['lat_2'])
 
             # Declare the xarray dataset open even though it is really only in memory at this point
             self.xrOpen = True
 
             # Compute grid metrics
             self.computeGridMetrics()
-       
 
-    
     # Original functions provided by Niki Zadeh - Lambert Conformal Conic grids
     # Grid creation and rotation in spherical coordinates
     def mesh_plot(self, lon, lat, lon0=0., lat0=90.):
@@ -589,10 +676,10 @@ class GridUtils:
             ax.plot(lon[:,i], lat[:,i], 'k', transform=cartopy.crs.Geodetic())
         for j in range(0,nj+1,2):
             ax.plot(lon[j,:], lat[j,:], 'k', transform=cartopy.crs.Geodetic())
-            
+
         return f, ax
-    
-    def rotate_x(self,x,y,z,theta):
+
+    def rotate_x(self, x, y, z, theta):
         """Rotate vector (x,y,z) by angle theta around x axis."""
         """Returns the rotated components."""
         cost = np.cos(theta)
@@ -600,8 +687,8 @@ class GridUtils:
         yp   = y*cost - z*sint
         zp   = y*sint + z*cost
         return x,yp,zp
-    
-    def rotate_y(self,x,y,z,theta):
+
+    def rotate_y(self, x, y, z, theta):
         """Rotate vector (x,y,z) by angle theta around y axis."""
         """Returns the rotated components."""
         cost = np.cos(theta)
@@ -609,8 +696,8 @@ class GridUtils:
         zp   = z*cost - x*sint
         xp   = z*sint + x*cost
         return xp,y,zp
-    
-    def rotate_z(self,x,y,z,theta):
+
+    def rotate_z(self, x, y, z, theta):
         """Rotate vector (x,y,z) by angle theta around z axis."""
         """Returns the rotated components."""
         cost = np.cos(theta)
@@ -618,83 +705,85 @@ class GridUtils:
         xp   = x*cost - y*sint
         yp   = x*sint + y*cost
         return xp,yp,z
-    
-    
-    def cart2pol(self,x,y,z):
+
+    def cart2pol(self, x, y, z):
         """Transform a point on globe from Cartesian (x,y,z) to polar coordinates."""
         """Returns the polar coordinates"""
         lam=np.arctan2(y,x)/self.PI_180
         phi=np.arctan(z/np.sqrt(x**2+y**2))/self.PI_180
         return lam,phi
-    
-    def pol2cart(self,lam,phi):
+
+    def pol2cart(self, lam, phi):
         """Transform a point on globe from Polar (lam,phi) to Cartesian coordinates."""
         """Returns the Cartesian coordinates"""
-        lam=lam*self.PI_180
-        phi=phi*self.PI_180
-        x=np.cos(phi)*np.cos(lam)
-        y=np.cos(phi)*np.sin(lam)
-        z=np.sin(phi)
+        lam = lam * self.PI_180
+        phi = phi * self.PI_180
+        x   = np.cos(phi) * np.cos(lam)
+        y   = np.cos(phi) * np.sin(lam)
+        z   = np.sin(phi)
         return x,y,z
-        
-    def rotate_z_mesh(self,lam,phi,theta):
+
+    def rotate_z_mesh(self, lam, phi, theta):
         """Rotate the whole mesh on globe by angle theta around z axis (globe polar axis)."""
         """Returns the rotated mesh."""
         #Bring the angle to be in [-pi,pi] so that atan2 would work
-        lam       = np.where(lam>180,lam-360,lam)
+        lam       = np.where(lam>180, lam-360, lam)
         #Change to Cartesian coord
-        x,y,z     = self.pol2cart(lam,phi)
+        x,y,z     = self.pol2cart(lam, phi)
         #Rotate
-        xp,yp,zp  = self.rotate_z(x,y,z,theta)
+        xp,yp,zp  = self.rotate_z(x, y, z, theta)
         #Change back to polar coords using atan2, in [-pi,pi]
-        lamp,phip = self.cart2pol(xp,yp,zp)
+        lamp,phip = self.cart2pol(xp, yp, zp)
         #Bring the angle back to be in [0,2*pi]
-        lamp      = np.where(lamp<0,lamp+360,lamp)
+        lamp      = np.where(lamp<0, lamp+360, lamp)
         return lamp,phip
-    
-    def rotate_x_mesh(self,lam,phi,theta):
+
+    def rotate_x_mesh(self, lam, phi, theta):
         """Rotate the whole mesh on globe by angle theta around x axis (passing through equator and prime meridian.)."""
         """Returns the rotated mesh."""
         #Bring the angle to be in [-pi,pi] so that atan2 would work
-        lam       = np.where(lam>180,lam-360,lam)
+        lam       = np.where(lam>180, lam-360, lam)
         #Change to Cartesian coord
-        x,y,z     = self.pol2cart(lam,phi)
+        x,y,z     = self.pol2cart(lam, phi)
         #Rotate
-        xp,yp,zp  = self.rotate_x(x,y,z,theta)
+        xp,yp,zp  = self.rotate_x(x, y, z, theta)
         #Change back to polar coords using atan2, in [-pi,pi]
-        lamp,phip = self.cart2pol(xp,yp,zp)
+        lamp,phip = self.cart2pol(xp, yp, zp)
         #Bring the angle back to be in [0,2*pi]
-        lamp      = np.where(lamp<0,lamp+360,lamp)
+        lamp      = np.where(lamp<0, lamp+360, lamp)
         return lamp,phip
-    
-    def rotate_y_mesh(self,lam,phi,theta):
+
+    def rotate_y_mesh(self, lam, phi, theta):
         """Rotate the whole mesh on globe by angle theta around y axis (passing through equator and prime meridian+90.)."""
         """Returns the rotated mesh."""
         #Bring the angle to be in [-pi,pi] so that atan2 would work
-        lam       = np.where(lam>180,lam-360,lam)
+        lam       = np.where(lam>180, lam-360, lam)
         #Change to Cartesian coord
-        x,y,z     = self.pol2cart(lam,phi)
+        x,y,z     = self.pol2cart(lam, phi)
         #Rotate
-        xp,yp,zp  = self.rotate_y(x,y,z,theta)
+        xp,yp,zp  = self.rotate_y(x, y, z, theta)
         #Change back to polar coords using atan2, in [-pi,pi]
-        lamp,phip = self.cart2pol(xp,yp,zp)
+        lamp,phip = self.cart2pol(xp, yp, zp)
         #Bring the angle back to be in [0,2*pi]
-        lamp      = np.where(lamp<0,lamp+360,lamp)
+        lamp      = np.where(lamp<0, lamp+360, lamp)
         return lamp,phip
-    
+
     def generate_latlon_mesh_centered(self, lni, lnj, llon0, llen_lon, llat0, llen_lat, ensure_nj_even=True):
         """Generate a regular lat-lon grid"""
-        msg = 'Generating regular lat-lon grid centered at %.2f %.2f on equator.' % (llon0, llat0)
+        if llat0 == 0.0:
+            msg = 'Generating regular lat-lon grid centered at (%.2f, %.2f) on equator.' % (llon0, llat0)
+        else:
+            msg = 'Generating regular lat-lon grid centered at (%.2f %.2f).' % (llon0, llat0)
         self.printMsg(msg, level=logging.INFO)
         llonSP = llon0 - llen_lon/2 + np.arange(lni+1) * llen_lon/float(lni)
         llatSP = llat0 - llen_lat/2 + np.arange(lnj+1) * llen_lat/float(lnj)
         if(llatSP.shape[0]%2 == 0 and ensure_nj_even):
             msg = "   The number of j's is not even. Fixing this by cutting one row at south."
             self.printMsg(msg, level=logging.INFO)
-            llatSP = np.delete(llatSP,0,0)
-        llamSP = np.tile(llonSP,(llatSP.shape[0],1))
-        lphiSP = np.tile(llatSP.reshape((llatSP.shape[0],1)),(1,llonSP.shape[0]))
-        msg = '   Generated regular lat-lon grid between latitudes %.2f %.2f' % (lphiSP[0,0],lphiSP[-1,0])
+            llatSP = np.delete(llatSP, 0, 0)
+        llamSP = np.tile(llonSP,(llatSP.shape[0], 1))
+        lphiSP = np.tile(llatSP.reshape((llatSP.shape[0], 1)), (1, llonSP.shape[0]))
+        msg = '   Generated regular lat-lon grid between latitudes %.2f %.2f' % (lphiSP[0,0], lphiSP[-1,0])
         self.printMsg(msg, level=logging.INFO)
         msg = '   Number of js=%d' % (lphiSP.shape[0])
         self.printMsg(msg, level=logging.INFO)
@@ -705,23 +794,33 @@ class GridUtils:
         #dy_h=h_j_inv[:-1,:]*self._default_Re
         #area=delsin_j[:-1,:-1]*self._default_Re*self._default_Re*llen_lon*self.self.PI_180/lni
         return llamSP,lphiSP
-    
-    def generate_regional_spherical(self, lon0, lon_span, lat0, lat_span, tilt, refine):
+
+    def generate_regional_spherical(self, lon0, lon_span, lat0, lat_span, tilt, gRes, gMode):
         """Generate a regional grid centered at (lon0,lat0) with spans of (lon_span,lat_span) and tilted by angle tilt"""
-        Ni = int(lon_span*refine)
-        Nj = int(lat_span*refine)
-       
-        #Generate a mesh at equator centered at (lon0, 0)
-        lam_,phi_ = self.generate_latlon_mesh_centered(Ni,Nj,lon0,lon_span,0.0,lat_span)
-        lam_,phi_ = self.rotate_z_mesh(lam_,phi_, (90.-lon0)*self.PI_180)  #rotate around z to bring it centered at y axis
-        lam_,phi_ = self.rotate_y_mesh(lam_,phi_,tilt*self.PI_180)         #rotate around y axis to tilt it as desired
-        lam_,phi_ = self.rotate_x_mesh(lam_,phi_,lat0*self.PI_180)         #rotate around x to bring it centered at (lon0,lat0)
-        lam_,phi_ = self.rotate_z_mesh(lam_,phi_,-(90.-lon0)*self.PI_180)  #rotate around z to bring it back
-                
+        Ni = int(lon_span * gRes)
+        Nj = int(lat_span * gRes)
+
+        # Generate a mesh at equator centered at (lon0, 0)
+        lam_,phi_ = self.generate_latlon_mesh_centered(Ni, Nj, lon0, lon_span, 0.0, lat_span)
+        lam_,phi_ = self.rotate_z_mesh(lam_,phi_, (90.-lon0)*self.PI_180)   #rotate around z to bring it centered at y axis
+        lam_,phi_ = self.rotate_y_mesh(lam_,phi_, tilt*self.PI_180)         #rotate around y axis to tilt it as desired
+        lam_,phi_ = self.rotate_x_mesh(lam_,phi_, lat0*self.PI_180)         #rotate around x to bring it centered at (lon0,lat0)
+        lam_,phi_ = self.rotate_z_mesh(lam_,phi_, -(90.-lon0)*self.PI_180)  #rotate around z to bring it back
+
         return lam_,phi_
 
     # Grid generation functions
-    
+
+    def generate_regional_mercator(self, lon0, lon_span, lat0, lat_span, tilt, gRes, gMode):
+        """Generate a regional grid centered at (lon0, lat0) with spans of (lon_span, lat_span) and tilted by angle tilt"""
+        Ni = int(lon_span * gRes)
+        Nj = int(lat_span * gRes)
+
+        # Generate a mesh centered at (lon0, lat0)
+        lam_,phi_ = self.generate_latlon_mesh_centered(Ni, Nj, lon0, lon_span, lat0, lat_span)
+
+        return lam_,phi_
+
     # xarray Dataset operations
     
     def closeDataset(self):
@@ -794,6 +893,8 @@ class GridUtils:
             self.xrFilename = filename
             
         try:
+            if self.grid.x.attrs['units'] == 'degrees_east':
+                self.grid.x.values = np.where(self.grid.x.values>180, self.grid.x.values-360, self.grid.x.values)
             self.grid.to_netcdf(self.xrFilename, encoding=self.removeFillValueAttributes())
             msg = "Successfully wrote netCDF file to %s" % (self.xrFilename)
             self.printMsg(msg, level=logging.INFO)
@@ -821,14 +922,10 @@ class GridUtils:
     
     def plotGrid(self):
         '''Perform a plot operation.
-
         :return: Returns a tuple of matplotlib objects (figure, axes)
         :rtype: tuple
-
         To plot a grid, you first must have the projection set.
-
         :Example:
-
         >>> grd = gridUtils()
         >>> grd.setPlotParameters(
                 {
@@ -992,6 +1089,7 @@ class GridUtils:
                 'nx': number of grid points along the x or i axis [integer]
                 'ny': number of grid points along the y or i axis [integer]
                 'tilt': degrees to rotate the grid [float, only available in LambertConformalConic]
+                'gridResolution': 
                 
                 SUBKEY: 'projection' (mostly follows proj.org terminology)
                     'name': Grid projection ['LambertConformalConic','Mercator','NorthPolarStereo']
@@ -1012,7 +1110,6 @@ class GridUtils:
                 
                 'gridMode': 2 = supergrid(*); 1 = actual grid [integer, 1 or 2(*)]
                 'gridResolution': Inverse grid resolution scale factor [float, 1.0(*)]        
-
             Not to be confused with plotParameters which control how this grid or other
             information is plotted.  For instance, the grid projection and the requested plot
             can be in another projection.
@@ -1104,7 +1201,6 @@ class GridUtils:
     
     def setPlotParameters(self, plotParameters, subKey=None):
         """A generic method for setting plotting parameters using dictionary arguments.
-
         :param plotParameters: plot parameters to set or update
         :type plotParameters: dictionary
         :param subkey: an entry in plotParameters that contains a dictionary of information to set or update
@@ -1133,7 +1229,6 @@ class GridUtils:
                 'iLinewidth': matplotlib linewidth for i vertices [points: 1.0(*)]
                 'jLinewidth': matplotlib linewidth for j vertices [points: 1.0(*)]
                     For dense gridcells, you can try a very thin linewidth of 0.1.
-
                 SUBKEY: 'projection' (mostly follows proj.org terminology)
                     'name': Grid projection ['LambertConformalConic','Mercator','NorthPolarStereo']
                     'lat_0': Latitude of projection center [degrees, 0.0(*)]
@@ -1168,9 +1263,3 @@ class GridUtils:
 
         if not(subKey):
             self.gridInfo['plotParameterKeys'] = self.gridInfo['plotParameters'].keys()
-
-    # Functions from pyroms/examples/grid_MOM6/convert_ROMS_grid_to_MOM6.py
-    # Attribution: Mehmet Ilicak via Alistair Adcroft
-    # Requires spherical.py (copied to local lib)
-    # Based on code written by Alistair Adcroft and Matthew Harrison of GFDL
-    

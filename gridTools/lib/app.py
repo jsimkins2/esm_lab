@@ -1,4 +1,4 @@
-# GridUtils.App()
+ # GridUtils.App()
 
 # Modules
 
@@ -21,6 +21,9 @@ pn.extension()
 class App:
 
     def __init__(self, grd=None):
+        
+        # Locals
+        self.gridMade = False
         # Globals
         
         # This application has its own copy of GridTools() object
@@ -213,6 +216,8 @@ class App:
 
         msg = "Make grid succeeded: %s" % (updateMessage)
         self.grd.printMsg(msg, logging.INFO)
+        
+        gridMade = True
 
         return
 
@@ -266,12 +271,38 @@ class App:
             msg = "Running make_plot(): done"     
             self.grd.printMsg(msg, logging.INFO)
         else:
-            (figure, axes) = self.errorFigure()
-            msg = "Running make_plot(): plotting failure"
-            self.grd.printMsg(msg, logging.ERROR)
+            if self.gridMade == False:
+                (figure, axes) = self.errorNoGridFigure()
+                msg = "Running make_plot(): plotting failure - unspecified grid."
+                self.grd.printMsg(msg, logging.ERROR)
+            else:
+                (figure, axes) = self.errorFigure()
+                msg = "Running make_plot(): plotting failure"
+                self.grd.printMsg(msg, logging.ERROR)
 
         return figure
 
+    def errorNoGridFigure(self):
+        '''Creates a plot for the scenario where the user has not specified the grid before making a plot'''
+        
+        f = self.grd.newFigure()
+        central_longitude = self.grd.getPlotParameter('lon_0', subKey='projection', default=0.0)
+        central_latitude = self.grd.getPlotParameter('lat_0', subKey='projection', default=90.0)
+        satellite_height = self.grd.getPlotParameter('satellite_height', default=35785831)
+        crs = cartopy.crs.NearsidePerspective(central_longitude=central_longitude, central_latitude=central_latitude, satellite_height=satellite_height)
+        ax = f.subplots(subplot_kw={'projection': crs})
+        if self.grd.usePaneMatplotlib:
+            FigureCanvas(f)
+        mapExtent = self.grd.getPlotParameter('extent', default=[])
+        mapCRS = self.grd.getPlotParameter('extentCRS', default=cartopy.crs.PlateCarree())
+        ax.set_global()
+        ax.coastlines()
+        ax.gridlines()
+        ax.set_title("Unspecified Grid", color='red')
+        ax.text(0.5, 0.55, 'please create your grid before plotting', transform=ax.transAxes,
+                fontsize=10, color='blue', alpha=0.4,
+                ha='center', va='center', rotation='0')
+        return f, ax
     
     def errorFigure(self):
         '''Create Blank Plot to signal plotting failure. This signals a problem within the user specifications in relation to code capabilities.  '''
@@ -290,8 +321,8 @@ class App:
         ax.coastlines()
         ax.gridlines()
         ax.set_title("Plot Failure", color='red')
-        ax.text(0.5, 0.4, 'please check plot/grid parameters and retry', transform=ax.transAxes,
-                fontsize=10, color='red', alpha=0.2,
+        ax.text(0.5, 0.55, 'please check plot/grid parameters and retry', transform=ax.transAxes,
+                fontsize=10, color='red', alpha=0.4,
                 ha='center', va='center', rotation='0')
         return f, ax
     
