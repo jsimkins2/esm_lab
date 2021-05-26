@@ -14,7 +14,7 @@ gridLatName = None
 gridLonName = None
 bathLatName = None
 bathLonName = None
-coarsenInt = 1
+coarsenInt = 10
 grid = xr.open_dataset(gridFile)
 
 if gridGeoLoc == "center":
@@ -318,7 +318,7 @@ dr = bath[bathVarName]
 # create land mask xarray dataarray
 lm_ds = bath[bathVarName].where(bath[bathVarName] < 0)
 lm_ds = lm_ds.fillna(1)
-lm_ds = bath[bathVarName].where(bath[bathVarName] > 0)
+lm_ds = lm_ds.where(lm_ds > 0)
 lm_ds = lm_ds.fillna(0)
 
 
@@ -328,8 +328,8 @@ dr_out = regridder(dr)
 lm_ds_out = regridder(lm_ds)
 
 # coarsen the bathymetry and landmask fraction from supergrid to regular grid supergrid is True
-dr_out = dr_out.coarsen(lon=2,lat=2, boundary='pad').mean()
-lm_ds_out = lm_ds_out.coarsen(lon=2,lat=2, boundary='pad').mean()
+dr_out = dr_out.coarsen(nx=2,ny=2, boundary='pad').mean()
+lm_ds_out = lm_ds_out.coarsen(nx=2,ny=2, boundary='pad').mean()
 
 # save our netCDF files
 opath = os.path.dirname(bathFile)
