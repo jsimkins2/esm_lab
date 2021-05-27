@@ -2,7 +2,7 @@
 import xarray as xr
 import numpy as np
 import xesmf as xe
-
+import os
 
 
 gridFile="/Users/james/Downloads/gridFile.nc"
@@ -62,7 +62,6 @@ if gridGeoLoc == "center":
     filler_array[0:lon_corners.shape[0], 0:lon_corners.shape[1]] = lon_corners[:,:]
     extCol = np.append(np.diff(lon_corners[:,-1]), np.diff(lon_corners[:,-1])[-1])  + lon_corners[:,-1]
     extRow = np.append(np.diff(lon_corners[-1,:], axis=0), np.diff(lon_corners[-1,:], axis=0)[-1])  + lon_corners[-1,:]
-    corner_cell = np.diff(lon_corners[:,-1])[-1]
     filler_array[0:extCol.shape[0], -1] = extCol
     filler_array[-1, 0:extRow.shape[0]] = extRow
     # there is one final corner that's not been interpolated, fill that cell here - have to double the difference to avoid repeating 
@@ -87,7 +86,6 @@ if gridGeoLoc == "center":
     filler_array[0:lat_corners.shape[0], 0:lat_corners.shape[1]] = lat_corners[:,:]
     extCol = np.append(np.diff(lat_corners[:,-1]), np.diff(lat_corners[:,-1])[-1])  + lat_corners[:,-1]
     extRow = np.append(np.diff(lat_corners[-1,:], axis=0), np.diff(lat_corners[-1,:], axis=0)[-1])  + lat_corners[-1,:]
-    corner_cell = np.diff(lon_corners[:,-1])[-1]
     filler_array[0:extCol.shape[0], -1] = extCol
     filler_array[-1, 0:extRow.shape[0]] = extRow
     # there is one final corner that's not been interpolated, fill that cell here - have to double the difference to avoid repeating 
@@ -294,12 +292,13 @@ if bathGeoLoc == "corner":
 
 
 
+# I am not sure if we need this curvilinear portion or not - test this
 # get 2D versions of the lat and lon variables
 #lon2d, lat2d = np.meshgrid(bath.lon_centers.values, bath.lat_centers.values)
 
 # assign 2d coordinates as lat/lon 
-#bath = bath.assign_coords({"lon" : (("y", "x"), lon2d)})
-#bath = bath.assign_coords({"lat" : (("y", "x"), lat2d)})
+#bath = bath.assign_coords({"lon" : (("ny", "nx"), lon2d)})
+#bath = bath.assign_coords({"lat" : (("ny", "nx"), lat2d)})
         
 # rename for xesmf
 grid["lon"] = grid["lon_centers"]
@@ -317,15 +316,16 @@ dr = bath[bathVarName]
 
 # create land mask xarray dataarray
 lm_ds = bath[bathVarName].where(bath[bathVarName] < 0)
-lm_ds = lm_ds.fillna(1)
-lm_ds = lm_ds.where(lm_ds > 0)
 lm_ds = lm_ds.fillna(0)
-
+lm_ds = lm_ds.where(lm_ds > -0.000001)
+lm_ds = lm_ds.fillna(1)
+lm_ds.name = 'ocean_fraction'
 
 # regrid our bathymetry and landmask
 regridder = xe.Regridder(bath, grid, method="conservative")
 dr_out = regridder(dr)
 lm_ds_out = regridder(lm_ds)
+
 
 # coarsen the bathymetry and landmask fraction from supergrid to regular grid supergrid is True
 dr_out = dr_out.coarsen(nx=2,ny=2, boundary='pad').mean()
