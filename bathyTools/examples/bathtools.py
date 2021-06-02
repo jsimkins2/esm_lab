@@ -269,7 +269,7 @@ class BathUtils:
                     
             if 'lon_corners' not in bath.variables:
                 if bathLonName != None:
-                    bath = bathrename({bathLonName : 'lon_corners'})
+                    bath = bath.rename({bathLonName : 'lon_corners'})
                 elif 'x' in bath.variables:
                     bath = bath.rename({'x': 'lon_corners'})
                 elif 'lon' in bath.variables:
@@ -345,9 +345,9 @@ class BathUtils:
         lm_ds_out = lm_ds_out.coarsen(nx=2,ny=2, boundary='pad').mean()
         
         # save our netCDF files
-        opath = os.path.dirname(bathFile)
-        dr_out.to_netcdf(opath)
-        lm_ds_out.to_netcdf(opath)
+        opath = os.path.dirname(gridFile)
+        dr_out.to_netcdf(opath + "ocean_topog.nc")
+        lm_ds_out.to_netcdf(opath + "ocean_mask.nc")
         
         return
     

@@ -255,7 +255,7 @@ if bathGeoLoc == "corner":
             
     if 'lon_corners' not in bath.variables:
         if bathLonName != None:
-            bath = bathrename({bathLonName : 'lon_corners'})
+            bath = bath.rename({bathLonName : 'lon_corners'})
         elif 'x' in bath.variables:
             bath = bath.rename({'x': 'lon_corners'})
         elif 'lon' in bath.variables:
