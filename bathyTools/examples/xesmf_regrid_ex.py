@@ -44,8 +44,7 @@ if gridGeoLoc == "center":
         else:
             print('Error: Please define gridLonName')
     
-    # fix longitudes from 0 to 360 for computation
-    grid['lon_centers'].values =  np.where(grid['lon_centers'].values < 0., grid['lon_centers'].values + 360, grid['lon_centers'].values)
+
     lon_centers = grid['lon_centers'].values
     lat_centers = grid['lat_centers'].values
     
@@ -125,6 +124,7 @@ if gridGeoLoc == "corner":
         else:
             print('Error: Please define gridLonName')
 
+    # NOTE THAT DOING 0-360 DEGREES FOR COMPUTATION OF LONGITUDES WILL CAUSE REGRIDDER TO FAILLLLLLL
     # fix longitudes from 0 to 360 for computation
     #if "lon_corners" in grid.coords:
      #   grid = grid.assign_coords(lon_corners=(np.where(grid['lon_corners'].values < 0., grid['lon_corners'].values + 360, grid['lon_corners'].values)))
