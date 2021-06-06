@@ -5,8 +5,8 @@ import xesmf as xe
 import os
 
 
-#gridFile="/Users/james/Documents/Github/esm_lab/gridTools/nep7_grid/ocean_hgrid.nc"
-gridFile = "/Users/james/Downloads/gridFile.nc"
+gridFile="/Users/james/Documents/Github/esm_lab/gridTools/nep7_grid/ocean_hgrid.nc"
+#gridFile = "/Users/james/Downloads/gridFile.nc"
 bathFile="/Users/james/Downloads/gebco_2020_netcdf/GEBCO_2020.nc"
 gridGeoLoc = "corner"
 bathGeoLoc = "center"
@@ -15,7 +15,7 @@ gridLatName = None
 gridLonName = None
 bathLatName = None
 bathLonName = None
-coarsenInt = 20
+coarsenInt = 8
 grid = xr.open_dataset(gridFile)
 gridGeoLoc = 'corner'
 if gridGeoLoc == "center":
@@ -126,11 +126,11 @@ if gridGeoLoc == "corner":
             print('Error: Please define gridLonName')
 
     # fix longitudes from 0 to 360 for computation
-    if "lon_corners" in grid.coords:
-        grid = grid.assign_coords(lon_corners=(np.where(grid['lon_corners'].values < 0., grid['lon_corners'].values + 360, grid['lon_corners'].values)))
-        grid = grid.swap_dims({'lon_corners' : 'nxp'})    
-    if "lon_corners" in grid.data_vars:
-        grid['lon_corners'].values =  np.where(grid['lon_corners'].values < 0., grid['lon_corners'].values + 360, grid['lon_corners'].values)
+    #if "lon_corners" in grid.coords:
+     #   grid = grid.assign_coords(lon_corners=(np.where(grid['lon_corners'].values < 0., grid['lon_corners'].values + 360, grid['lon_corners'].values)))
+     #   grid = grid.swap_dims({'lon_corners' : 'nxp'})    
+    #if "lon_corners" in grid.data_vars:
+      #  grid['lon_corners'].values =  np.where(grid['lon_corners'].values < 0., grid['lon_corners'].values + 360, grid['lon_corners'].values)
 
     lon_corners = grid['lon_corners'].values
     lat_corners = grid['lat_corners'].values
@@ -196,11 +196,11 @@ def find_nearest(array, value):
     return idx
 
 # fix longitudes from 0 to 360 for computation
-if "lon_centers" in bath.coords:
-    bath = bath.assign_coords(lon_centers=(np.where(bath['lon_centers'].values < 0., bath['lon_centers'].values + 360, bath['lon_centers'].values)))
-    bath = bath.swap_dims({'lon_centers' : 'nx'})
-if "lon_centers" in bath.data_vars:
-    bath['lon_centers'].values =  np.where(bath['lon_centers'].values < 0., bath['lon_centers'].values + 360, bath['lon_centers'].values)
+#if "lon_centers" in bath.coords:
+#    bath = bath.assign_coords(lon_centers=(np.where(bath['lon_centers'].values < 0., bath['lon_centers'].values + 360, bath['lon_centers'].values)))
+#    bath = bath.swap_dims({'lon_centers' : 'nx'})
+#if "lon_centers" in bath.data_vars:
+#    bath['lon_centers'].values =  np.where(bath['lon_centers'].values < 0., bath['lon_centers'].values + 360, bath['lon_centers'].values)
 
 
 latMinInd = find_nearest(array = bath.lat_centers.values, value = np.min(grid.lat_centers.values))
@@ -208,6 +208,11 @@ latMaxInd = find_nearest(array = bath.lat_centers.values, value = np.max(grid.la
 lonMinInd = find_nearest(array = bath.lon_centers.values, value = np.min(grid.lon_centers.values))
 lonMaxInd = find_nearest(array = bath.lon_centers.values, value = np.max(grid.lon_centers.values))
 
+# after we go 0-360 for longitude, the indices need to be swapped so we have a slice
+if lonMinInd > lonMaxInd:
+    temp = lonMinInd
+    lonMinInd = lonMaxInd
+    lonMaxInd = temp
 # slice the large bathymetry file down to extents PLUS COARSEN INT as corners array should be 1 GREATER than centers array
 # calculate corners from this
 # still not sure if we need to do this step, but just keeping jst in case
@@ -263,22 +268,25 @@ bath[bathVarName] = (('ny', 'nx'), elev)
 
 # I am not sure if we need this curvilinear portion or not - test this
 # get 2D versions of the lat and lon variables
-#lon2d, lat2d = np.meshgrid(bath.lon_centers.values, bath.lat_centers.values)
-
+lon2d, lat2d = np.meshgrid(bath.lon_centers.values, bath.lat_centers.values)
+lon2d_b, lat2d_b = np.meshgrid(bath.lon_corners.values, bath.lat_corners.values)
 # assign 2d coordinates as lat/lon 
-#bath = bath.assign_coords({"lon" : (("ny", "nx"), lon2d)})
-#bath = bath.assign_coords({"lat" : (("ny", "nx"), lat2d)})
-        
+bath = bath.assign_coords({"lon" : (("ny", "nx"), lon2d)})
+bath = bath.assign_coords({"lat" : (("ny", "nx"), lat2d)})
+bath = bath.assign_coords({"lon_b" : (("nyp", "nxp"), lon2d_b)})
+bath = bath.assign_coords({"lat_b" : (("nyp", "nxp"), lat2d_b)})
+
 # rename for xesmf
 grid["lon"] = grid["lon_centers"]
 grid["lat"] = grid["lat_centers"]
 grid["lon_b"] = grid["lon_corners"]
 grid["lat_b"] = grid["lat_corners"]
 
-bath["lon"] = bath["lon_centers"]
-bath["lat"] = bath["lat_centers"]
-bath["lon_b"] = bath["lon_corners"]
-bath["lat_b"] = bath["lat_corners"]
+#bath["lon"] = bath["lon_centers"]
+#bath["lat"] = bath["lat_centers"]
+#bath["lon_b"] = bath["lon_corners"]
+#bath["lat_b"] = bath["lat_corners"]
+
 
 # create xarray data array of the bathymetry variable name containing the topographic elevation data
 dr = bath[bathVarName]
@@ -301,9 +309,9 @@ dr_out = dr_out.coarsen(nx=2,ny=2, boundary='pad').mean()
 lm_ds_out = lm_ds_out.coarsen(nx=2,ny=2, boundary='pad').mean()
 
 # save our netCDF files
-opath = os.path.dirname(bathFile)
-dr_out.to_netcdf(opath)
-lm_ds_out.to_netcdf(opath)
+opath = os.path.dirname(gridFile)
+dr_out.to_netcdf(opath + "/ocean_topog.nc")
+lm_ds_out.to_netcdf(opath + "/ocean_mask.nc")
         
         
         
