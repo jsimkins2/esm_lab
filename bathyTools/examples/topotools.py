@@ -339,7 +339,7 @@ class TopoUtils:
         
         
         # regrid our topography and land/ocean mask based on method
-        regridder = xe.Regridder(topo, grid, method="conservative")
+        regridder = xe.Regridder(topo, grid, method="conservative", periodic=True)
         dr_out = regridder(dr)
         lm_ds_out = regridder(lm_ds)
         
@@ -349,6 +349,7 @@ class TopoUtils:
         
         # save our netCDF files
         opath = os.path.dirname(gridFile)
+        #dr_out.plot()
         dr_out.to_netcdf(opath + "/ocean_topog.nc")
         lm_ds_out.to_netcdf(opath + "/ocean_mask.nc")
         

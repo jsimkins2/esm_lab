@@ -5,8 +5,8 @@ import xesmf as xe
 import os
 
 
-#gridFile="/Users/james/Documents/Github/esm_lab/gridTools/nep7_grid/ocean_hgrid.nc"
-gridFile = "/Users/james/Downloads/gridFile.nc"
+gridFile="/Users/james/Documents/Github/esm_lab/gridTools/nep7_grid/ocean_hgrid.nc"
+#gridFile = "/Users/james/Downloads/gridFile.nc"
 topoFile="/Users/james/Downloads/gebco_2020_netcdf/GEBCO_2020.nc"
 gridGeoLoc = "corner"
 topoVarName = 'elevation'
@@ -14,7 +14,9 @@ gridLatName = None
 gridLonName = None
 topoLatName = None
 topoLonName = None
-coarsenInt = 8
+topoDimX = None
+topoDimY = None
+coarsenInt = 5
 grid = xr.open_dataset(gridFile)
 
 gridGeoLoc = 'corner'
@@ -67,6 +69,13 @@ if gridGeoLoc == "center":
         else:
             print('Error: Please define gridLonName')
     
+    # NOTE THAT DOING 0-360 DEGREES FOR COMPUTATION OF LONGITUDES WILL CAUSE REGRIDDER TO FAILLLLLLL
+    # fix longitudes from 0 to 360 for computation
+   # if "lon_corners" in grid.coords:
+    #    grid = grid.assign_coords(lon_corners=(np.where(grid['lon_corners'].values < 0., grid['lon_corners'].values + 360, grid['lon_corners'].values)))
+      #  grid = grid.swap_dims({'lon_corners' : 'nxp'})    
+   # if "lon_corners" in grid.data_vars:
+     #   grid['lon_corners'].values =  np.where(grid['lon_corners'].values < 0., grid['lon_corners'].values + 360, grid['lon_corners'].values)
 
     lon_centers = grid['lon_centers'].values
     lat_centers = grid['lat_centers'].values
@@ -173,11 +182,11 @@ if gridGeoLoc == "corner":
 
     # NOTE THAT DOING 0-360 DEGREES FOR COMPUTATION OF LONGITUDES WILL CAUSE REGRIDDER TO FAILLLLLLL
     # fix longitudes from 0 to 360 for computation
-    #if "lon_corners" in grid.coords:
-     #   grid = grid.assign_coords(lon_corners=(np.where(grid['lon_corners'].values < 0., grid['lon_corners'].values + 360, grid['lon_corners'].values)))
-     #   grid = grid.swap_dims({'lon_corners' : 'nxp'})    
-    #if "lon_corners" in grid.data_vars:
-      #  grid['lon_corners'].values =  np.where(grid['lon_corners'].values < 0., grid['lon_corners'].values + 360, grid['lon_corners'].values)
+   # if "lon_corners" in grid.coords:
+    #    grid = grid.assign_coords(lon_corners=(np.where(grid['lon_corners'].values < 0., grid['lon_corners'].values + 360, grid['lon_corners'].values)))
+    #    grid = grid.swap_dims({'lon_corners' : 'nxp'})    
+   # if "lon_corners" in grid.data_vars:
+    #    grid['lon_corners'].values =  np.where(grid['lon_corners'].values < 0., grid['lon_corners'].values + 360, grid['lon_corners'].values)
 
     lon_corners = grid['lon_corners'].values
     lat_corners = grid['lat_corners'].values
@@ -263,6 +272,14 @@ def find_nearest(array, value):
     idx = (np.abs(array - value)).argmin()
     return idx
 
+# fix longitudes from 0 to 360 for computation
+#if "lon_centers" in topo.coords:
+#    topo = topo.assign_coords(lon_centers=(np.where(topo['lon_centers'].values < 0., topo['lon_centers'].values + 360, topo['lon_centers'].values)))
+#    topo = topo.swap_dims({'lon_centers' : 'nx'})
+#if "lon_centers" in topo.data_vars:
+#    topo['lon_centers'].values =  np.where(topo['lon_centers'].values < 0., topo['lon_centers'].values + 360, topo['lon_centers'].values)
+
+
 latMinInd = find_nearest(array = topo.lat_centers.values, value = np.min(grid.lat_centers.values))
 latMaxInd = find_nearest(array = topo.lat_centers.values, value = np.max(grid.lat_centers.values))
 lonMinInd = find_nearest(array = topo.lon_centers.values, value = np.min(grid.lon_centers.values))
@@ -345,7 +362,7 @@ lm_ds = lm_ds.fillna(1)
 
 
 # regrid our topography and land/ocean mask based on method
-regridder = xe.Regridder(topo, grid, method="conservative")
+regridder = xe.Regridder(topo, grid, method="conservative", periodic=True)
 dr_out = regridder(dr)
 lm_ds_out = regridder(lm_ds) 
 
