@@ -4,7 +4,7 @@ import xesmf as xe
 import xarray as xr
 import numpy as np
 
-class BathUtils:
+class TopoUtils:
 
     def __init__(self):
         # Constants
@@ -16,22 +16,51 @@ class BathUtils:
 
     # Topography functions
     
-    def regridTopo(gridFile, bathFile, gridGeoLoc = "corner", bathGeoLoc = "center", bathVarName="elevation", coarsenInt=10, superGrid=True, gridLatName=None, gridLonName=None, bathLatName=None, bathLonName=None):
+    def regridTopo(gridFile, bathFile, gridGeoLoc = "corner", bathVarName="elevation", coarsenInt=10, superGrid=True, gridDimX=None, gridDimY=None, gridLatName=None, gridLonName=None, bathDimX=None, bathDimY=None, bathLatName=None, bathLonName=None):
         """Regrid topography file to the resolution of a given grid file.
         
         gridFile: Path to netCDF gridFile
         bathFile: Path to netCDF bathymetry file
         gridGeoLoc: "center" or "corner" - cell location of geographic placement of grid file - for example, x/y are located at 'q' points, which are located at the corner of each cell
-        bathGeoLoc: "center" or "corner" - cell location of geographic placement of bathymetry file - for example, x/y are located at 'q' points, which are located at the corner of each cell
         bathVarName: varialbe name of the bathymetry/depth/topography variable within the bathymetry file
         coarsenInt: Integer value used to decrease resolution of a given bathymetry file - see `xarray.coarsen`
         superGrid: When true, this assumes the gridFile is a supergrid and the resulting bathymetry is coarsened to a regular grid.
+        gridDimX: The name of the dimension along the X axis of the grid file
+        gridDimY: The name of the dimension along the Y axis of the grid file
+        gridLatName: The name of the latitude variable of the grid file
+        gridLonName: The name of the longitude variable of the grid file
+        bathDimX: The name of the dimension along the X axis of the topography file
+        bathDimY: The name of the dimension along the Y axis of the topography file
+        bath
         
         """
         
         grid = xr.open_dataset(gridFile)
 
         if gridGeoLoc == "center":
+            if 'nx' not in grid.dims:
+                if gridDimX != None:
+                    grid = grid.rename_dims({gridDimX : "nx"})
+                elif 'lon' in grid.dims:
+                    grid = grid.rename_dims({"lon" : "nx"})
+                elif 'longitude' in grid.dims:
+                    grid = grid.rename_dims({"longitude" : "nx"})
+                elif 'x' in grid.dims:
+                    grid = grid.rename_dims({"x" : "nx"})
+                else:
+                    print ('Error: plase define gridDimX')
+            if 'ny' not in grid.dims:
+                if gridDimX != None:
+                    grid = grid.rename_dims({gridDimY : "ny"})
+                elif 'lon' in grid.dims:
+                    grid = grid.rename_dims({"lat" : "ny"})
+                elif 'longitude' in grid.dims:
+                    grid = grid.rename_dims({"latitude" : "ny"})
+                elif 'y' in grid.dims:
+                    grid = grid.rename_dims({"y" : "ny"})
+                else:
+                    print ('Error: plase define gridDimY')
+
             if 'lat_centers' not in grid.variables:
                 if gridLatName != None:
                     grid = grid.rename({gridLatName: 'lat_centers'})
@@ -56,8 +85,8 @@ class BathUtils:
                     grid= grid.rename({'longitude': 'lon_centers'})
                 else:
                     print('Error: Please define gridLonName')
-        
-                
+            
+            
             lon_centers = grid['lon_centers'].values
             lat_centers = grid['lat_centers'].values
             
@@ -70,20 +99,16 @@ class BathUtils:
                 + lon_centers[1:, 1:]
             )
             
-            # trying to expand out the cornesr here by taking the difference of the last row/column, 
-            # adding the difference to the last row/column, then plugging that new row/column into an expanded matrix called filler_array
+            # create filler arrays to interpolate lon corner values onto.
             filler_array = np.zeros((lon_corners.shape[0] + 1, lon_corners.shape[1] + 1))
             filler_array[0:lon_corners.shape[0], 0:lon_corners.shape[1]] = lon_corners[:,:]
             extCol = np.append(np.diff(lon_corners[:,-1]), np.diff(lon_corners[:,-1])[-1])  + lon_corners[:,-1]
             extRow = np.append(np.diff(lon_corners[-1,:], axis=0), np.diff(lon_corners[-1,:], axis=0)[-1])  + lon_corners[-1,:]
             filler_array[0:extCol.shape[0], -1] = extCol
             filler_array[-1, 0:extRow.shape[0]] = extRow
-            # there is one final corner that's not been interpolated, fill that cell here - have to double the difference to avoid repeating 
-            # the same value for that final corner
             final_corner = np.diff(lon_corners[-1,:])[-1]*2  + lon_corners[-1,-1]
             filler_array[-1,-1] = final_corner
-            # testing
-            # plt.pcolormesh(filler_array)
+
             grid['lon_corners'] = xr.DataArray(data=filler_array, dims=("nyp", "nxp"))
             
             lat_corners = 0.25 * (
@@ -93,9 +118,7 @@ class BathUtils:
                 + lat_centers[1:, 1:]
             )
             
-            
-            # trying to expand out the cornesr here by taking the difference of the last row/column, 
-            # adding the difference to the last row/column, then plugging that new row/column into an expanded matrix called filler_array
+            # create filler arrays to interpolate lat corner values onto.
             filler_array = np.zeros((lat_corners.shape[0] + 1, lat_corners.shape[1] + 1))
             filler_array[0:lat_corners.shape[0], 0:lat_corners.shape[1]] = lat_corners[:,:]
             extCol = np.append(np.diff(lat_corners[:,-1]), np.diff(lat_corners[:,-1])[-1])  + lat_corners[:,-1]
@@ -106,12 +129,33 @@ class BathUtils:
             # the same value for that final corner
             final_corner = np.diff(lat_corners[-1,:])[-1]*2  + lat_corners[-1,-1]
             filler_array[-1,-1] = final_corner
-            # testing
-            #plt.pcolormesh(filler_array)
-            # add formal lat corner to grid object
+
             grid['lat_corners'] = xr.DataArray(data=filler_array, dims=("nyp", "nxp"))
             
         if gridGeoLoc == "corner":
+            if 'nxp' not in grid.dims:
+                if gridDimX != None:
+                    grid = grid.rename_dims({gridDimX : "nxp"})
+                elif 'lon' in grid.dims:
+                    grid = grid.rename_dims({"lon" : "nxp"})
+                elif 'longitude' in grid.dims:
+                    grid = grid.rename_dims({"longitude" : "nxp"})
+                elif 'x' in grid.dims:
+                    grid = grid.rename_dims({"x" : "nxp"})
+                else:
+                    print ('Error: plase define gridDimX')
+            if 'nyp' not in grid.dims:
+                if gridDimX != None:
+                    grid = grid.rename_dims({gridDimY : "nyp"})
+                elif 'lon' in grid.dims:
+                    grid = grid.rename_dims({"lat" : "nyp"})
+                elif 'longitude' in grid.dims:
+                    grid = grid.rename_dims({"latitude" : "nyp"})
+                elif 'y' in grid.dims:
+                    grid = grid.rename_dims({"y" : "nyp"})
+                else:
+                    print ('Error: plase define gridDimY')
+                    
             if 'lat_corners' not in grid.variables:
                 if gridLatName != None:
                     grid = grid.rename({gridLatName: 'lat_corners'})
@@ -122,9 +166,7 @@ class BathUtils:
                 elif 'latitude' in grid.variables:
                     grid = grid.rename({'latitude': 'lat_corners'})
                 else:
-                    print('Error: please define gridlatname')
-            
-                    
+                    print('Error: please define gridlatname')   
             if 'lon_corners' not in grid.variables:
                 if gridLonName != None:
                     grid = grid.rename({gridLonName : 'lon_corners'})
@@ -136,8 +178,8 @@ class BathUtils:
                     grid= grid.rename({'longitude': 'lon_corners'})
                 else:
                     print('Error: Please define gridLonName')
-        
-                
+            
+
             lon_corners = grid['lon_corners'].values
             lat_corners = grid['lat_corners'].values
             
@@ -160,170 +202,131 @@ class BathUtils:
             grid['lat_centers'] = xr.DataArray(data=lat_centers, dims=("ny", "nx"))
             grid['lon_centers'] = xr.DataArray(data=lon_centers, dims=("ny", "nx"))
 
-        
-        # open bathymetry file
+
+        # BATHYMETRY/TOPOGRAPHY XARRAY OBJECT ORGANIZATION
         bath = xr.open_dataset(bathFile)
-        bathGeoLoc = "center"
-        if bathGeoLoc == "center":
-            # have to rename the dimensions to nx, ny
-            # will need to revisit this in case dimensions are not named lat/lon
-            bath = bath.rename_dims({"lon" : "nx"})
-            bath = bath.rename_dims({"lat" : "ny"})
-            
-            # add lat/lon centers to bath variables
-            if 'lat_centers' not in bath.variables:
-                if bathLatName != None:
-                    bath = bath.rename({bathLatName: 'lat_centers'})
-                elif 'y' in bath.variables:
-                    bath = bath.rename({'y': 'lat_centers'})
-                elif 'lat' in bath.variables:
-                    bath = bath.rename({'lat': 'lat_centers'})
-                elif 'latitude' in bath.variables:
-                    bath = bath.rename({'latitude': 'lat_centers'})
-                else:
-                    print('Error: please define bathlatname')
-            
-                    
-            if 'lon_centers' not in bath.variables:
-                if bathLonName != None:
-                    bath = bath.rename({bathLonName : 'lon_centers'})
-                elif 'x' in bath.variables:
-                    bath = bath.rename({'x': 'lon_centers'})
-                elif 'lon' in bath.variables:
-                    bath = bath.rename({'lon': 'lon_centers'})
-                elif 'longitude' in bath.variables:
-                    bath= bath.rename({'longitude': 'lon_centers'})
-                else:
-                    print('Error: Please define bathLonName')
-            
-            # grab index location of grid extents
-            def find_nearest(array, value):
-                array = np.asarray(array)
-                idx = (np.abs(array - value)).argmin()
-                return idx
-            
-            latMinInd = find_nearest(array = bath.lat_centers.values, value = np.min(grid.lat_centers.values))
-            latMaxInd = find_nearest(array = bath.lat_centers.values, value = np.max(grid.lat_centers.values))
-            lonMinInd = find_nearest(array = bath.lon_centers.values, value = np.min(grid.lon_centers.values))
-            lonMaxInd = find_nearest(array = bath.lon_centers.values, value = np.max(grid.lon_centers.values))
-            
-            # slice the large bathymetry file down to extents PLUS COARSEN INT as corners array should be 1 GREATER than centers array
-            # calculate corners from this
-            # still not sure if we need to do this step, but just keeping jst in case
-            bathCo = bath.sel(nx=slice(lonMinInd, lonMaxInd + coarsenInt*2), ny=slice(latMinInd, latMaxInd + coarsenInt*2))
-            bathCo = bathCo.coarsen(nx=coarsenInt,ny=coarsenInt, boundary='pad').mean()
-            # slice the large bathymetry file down to the extents of the grid file
-            bath = bath.isel(nx=slice(lonMinInd, lonMaxInd), ny=slice(latMinInd, latMaxInd))
-            # if we want to coarsen the bath file to make it lighter on the machine, do so here
-            # I'm not sure how coarsening will affect nxp/nyp arrays..hopefully adding coarsenInt solves that
-            bath = bath.coarsen(nx=coarsenInt,ny=coarsenInt, boundary='pad').mean()
         
-            # create dimensions of nxp nyp for the corners to latch onto
-            # first extract elevation because expanding dimensions automatically adds them to elevation variable for some reason
-            elev = bath[bathVarName].values
-            bath = bath.expand_dims({'nyp':(len(bath.ny) + 1)})
-            bath = bath.expand_dims({'nxp':(len(bath.nx) + 1)})
-            ##### Calculate the Lat/Lon Corner Values
-            lon_centers = bathCo['lon_centers'].values
-            lat_centers = bathCo['lat_centers'].values
-            
-            # To use conservative regidding, we need the cells corners. 
-            # Since they are not provided, we are creating some using a crude approximation. 
-            # NOTE THAT BECAUSE THIS IS A RECTANGULAR GRID, ARRAYS ARE 1D HERE AS OPPOSED TO 2D IN THE GRID FILE ABOVE
-            lon_corners = 0.25 * (
-                lon_centers[:-1]
-                + lon_centers[1:]
-                + lon_centers[:-1]
-                + lon_centers[1:]
-            )
+        if 'nx' not in bath.dims:
+            if bathDimX != None:
+                bath = bath.rename_dims({bathDimX : "nx"})
+            elif 'lon' in bath.dims:
+                bath = bath.rename_dims({"lon" : "nx"})
+            elif 'longitude' in bath.dims:
+                bath = bath.rename_dims({"longitude" : "nx"})
+            elif 'x' in bath.dims:
+                bath = bath.rename_dims({"x" : "nx"})
+            else:
+                print ('Error: plase define bathDimX')
+        if 'ny' not in bath.dims:
+            if bathDimY != None:
+                bath = bath.rename_dims({bathDimY : "ny"})
+            elif 'lat' in bath.dims:
+                bath = bath.rename_dims({"lat" : "ny"})
+            elif 'latitude' in bath.dims:
+                bath = bath.rename_dims({"latitude" : "ny"})
+            elif 'y' in bath.dims:
+                bath = bath.rename_dims({"y" : "ny"})
+            else:
+                print ('Error: plase define bathDimY')
+                
+        # coarsen bath file down based on coarsenInt
+        bath = bath.coarsen(nx=coarsenInt,ny=coarsenInt, boundary='pad').mean()
         
-            bath['lon_corners'] = xr.DataArray(data=lon_corners, dims=("nxp"))
-            
-            lat_corners = 0.25 * (
-                lat_centers[:-1]
-                + lat_centers[1:]
-                + lat_centers[:-1]
-                + lat_centers[1:]
-            )
-            
-            # assign these as coordinates in future?
-            bath['lat_corners'] = xr.DataArray(data=lat_corners, dims=("nyp"))
-            
-            # drop elevation and bring it back - have to do this because for some reason adding dimensinos 
-            bath = bath.drop_vars(bathVarName)
-            bath[bathVarName] = (('lon_centers', 'lat_centers'), elev)
-        
-        if bathGeoLoc == "corner":
-            if 'lat_corners' not in bath.variables:
-                if bathLatName != None:
-                    bath = bath.rename({bathLatName: 'lat_corners'})
-                elif 'y' in bath.variables:
-                    bath = bath.rename({'y': 'lat_corners'})
-                elif 'lat' in bath.variables:
-                    bath = bath.rename({'latitude': 'lat_corners'})
-                elif 'latitude' in bath.variables:
-                    bath = bath.rename({'latitude': 'lat_corners'})
-                else:
-                    print('Error: please define gridlatname')
-            
-                    
-            if 'lon_corners' not in bath.variables:
-                if bathLonName != None:
-                    bath = bath.rename({bathLonName : 'lon_corners'})
-                elif 'x' in bath.variables:
-                    bath = bath.rename({'x': 'lon_corners'})
-                elif 'lon' in bath.variables:
-                    bath = bath.rename({'lon': 'lon_corners'})
-                elif 'longitude' in grid.variables:
-                    bath = bath.rename({'longitude': 'lon_corners'})
-                else:
-                    print('Error: Please define gridLonName')
-        
-            bath = bath.sel(lon_centers=slice(np.min(grid.lon_centers.values), np.max(grid.lon_centers.values)), 
-                          lat_centers=slice(np.min(grid.lat_centers.values), np.max(grid.lat_centers.values)))
-            bath = bath.coarsen(lon_centers=coarsenInt,lat_centers=coarsenInt, boundary='pad').mean()    
-            lon_corners = bath['lon_corners'].values
-            lat_corners = bath['lat_corners'].values
-            
-            # To use conservative regidding, we need the cells centers. 
-            # Since they are not provided, we are creating some using a crude approximation. 
-            lon_centers = 0.25 * (
-                lon_corners[:-1, :-1]
-                + lon_corners[1:, :-1]
-                + lon_corners[:-1, 1:]
-                + lon_corners[1:, 1:]
-            )
-            
-            lat_centers = 0.25 * (
-                lat_corners[:-1, :-1]
-                + lat_corners[1:, :-1]
-                + lat_corners[:-1, 1:]
-                + lat_corners[1:, 1:]
-            )
-            
-            bath['lat_centers'] = xr.DataArray(data=lat_centers, dims=("ny", "nx"))
-            bath['lon_centers'] = xr.DataArray(data=lon_centers, dims=("ny", "nx"))
+        if 'lat_centers' not in bath.variables:
+            if bathLatName != None:
+                bath = bath.rename({bathLatName: 'lat_centers'})
+            elif 'y' in bath.variables:
+                bath = bath.rename({'y': 'lat_centers'})
+            elif 'lat' in bath.variables:
+                bath = bath.rename({'lat': 'lat_centers'})
+            elif 'latitude' in bath.variables:
+                bath = bath.rename({'latitude': 'lat_centers'})
+            else:
+                print('Error: please define gridlatname')
+        if 'lon_centers' not in bath.variables:
+            if bathLonName != None:
+                bath = bath.rename({bathLonName : 'lon_centers'})
+            elif 'x' in bath.variables:
+                bath = bath.rename({'x': 'lon_centers'})
+            elif 'lon' in bath.variables:
+                bath = bath.rename({'lon': 'lon_centers'})
+            elif 'longitude' in grid.variables:
+                bath = bath.rename({'longitude': 'lon_centers'})
+            else:
+                print('Error: Please define gridLonName')
         
         
-        ### CONVERT RECTANGULAR GRID TO CURVILINEAR HERE
-        # I am not sure if we need this curvilinear portion or not - test this
-        # get 2D versions of the lat and lon variables
-        #lon2d, lat2d = np.meshgrid(bath.lon_centers.values, bath.lat_centers.values)
+        # grab index location of grid extents
+        def find_nearest(array, value):
+            array = np.asarray(array)
+            idx = (np.abs(array - value)).argmin()
+            return idx
+
+        latMinInd = find_nearest(array = bath.lat_centers.values, value = np.min(grid.lat_centers.values))
+        latMaxInd = find_nearest(array = bath.lat_centers.values, value = np.max(grid.lat_centers.values))
+        lonMinInd = find_nearest(array = bath.lon_centers.values, value = np.min(grid.lon_centers.values))
+        lonMaxInd = find_nearest(array = bath.lon_centers.values, value = np.max(grid.lon_centers.values))
+        
+        if lonMinInd > lonMaxInd:
+            temp = lonMinInd
+            lonMinInd = lonMaxInd
+            lonMaxInd = temp
+
+        # slice the large bathymetry file down to the extents of the grid file + 1 on either side because we will slice down 2 points 
+        # after the corner points are calculated
+        bath = bath.isel(nx=slice(lonMinInd - 1, lonMaxInd + 1), ny=slice(latMinInd - 1, latMaxInd + 1))
+        
+        lon_centers = bath['lon_centers'].values
+        lat_centers = bath['lat_centers'].values
+        
+        lon_corners = 0.25 * (
+            lon_centers[:-1]
+            + lon_centers[1:]
+            + lon_centers[:-1]
+            + lon_centers[1:]
+        )
+        
+        lat_corners = 0.25 * (
+            lat_centers[:-1]
+            + lat_centers[1:]
+            + lat_centers[:-1]
+            + lat_centers[1:]
+        )
+        
+        # trim down the centers so they are 1 less than the corner points we just calculated
+        bath = bath.isel(nx=slice(1,-1), ny=slice(1,-1))
+        
+        # extract the topo values and add them back later with proper dimensions
+        elev = bath[bathVarName].values
+        
+        # add nxp and nyp dimensions for the lat/lon corners to latch onto
+        bath = bath.expand_dims({'nyp':(len(bath.ny) + 1)})
+        bath = bath.expand_dims({'nxp':(len(bath.nx) + 1)})
+        
+        # add the lat/lon corners as data variables
+        bath['lat_corners'] = xr.DataArray(data=lat_corners, dims=("nyp"))
+        bath['lon_corners'] = xr.DataArray(data=lon_corners, dims=("nxp"))
+        
+        # drop elevation and bring it back, this time constraining the dimensions to lat/lon centers
+        bath = bath.drop_vars(bathVarName)
+        bath[bathVarName] = (('ny', 'nx'), elev)
+        
+
+        lon2d, lat2d = np.meshgrid(bath.lon_centers.values, bath.lat_centers.values)
+        lon2d_b, lat2d_b = np.meshgrid(bath.lon_corners.values, bath.lat_corners.values)
         
         # assign 2d coordinates as lat/lon 
-        #bath = bath.assign_coords({"lon" : (("ny", "nx"), lon2d)})
-        #bath = bath.assign_coords({"lat" : (("ny", "nx"), lat2d)})
-                
+        bath = bath.assign_coords({"lon" : (("ny", "nx"), lon2d)})
+        bath = bath.assign_coords({"lat" : (("ny", "nx"), lat2d)})
+        bath = bath.assign_coords({"lon_b" : (("nyp", "nxp"), lon2d_b)})
+        bath = bath.assign_coords({"lat_b" : (("nyp", "nxp"), lat2d_b)})
+        
         # rename for xesmf
         grid["lon"] = grid["lon_centers"]
         grid["lat"] = grid["lat_centers"]
         grid["lon_b"] = grid["lon_corners"]
         grid["lat_b"] = grid["lat_corners"]
-        
-        bath["lon"] = bath["lon_centers"]
-        bath["lat"] = bath["lat_centers"]
-        bath["lon_b"] = bath["lon_corners"]
-        bath["lat_b"] = bath["lat_corners"]
+
         
         # create xarray data array of the bathymetry variable name containing the topographic elevation data
         dr = bath[bathVarName]
@@ -335,7 +338,7 @@ class BathUtils:
         lm_ds = lm_ds.fillna(1)
         
         
-        # regrid our bathymetry and land/ocean mask
+        # regrid our bathymetry and land/ocean mask based on method
         regridder = xe.Regridder(bath, grid, method="conservative")
         dr_out = regridder(dr)
         lm_ds_out = regridder(lm_ds)
@@ -346,8 +349,8 @@ class BathUtils:
         
         # save our netCDF files
         opath = os.path.dirname(gridFile)
-        dr_out.to_netcdf(opath + "ocean_topog.nc")
-        lm_ds_out.to_netcdf(opath + "ocean_mask.nc")
+        dr_out.to_netcdf(opath + "/ocean_topog.nc")
+        lm_ds_out.to_netcdf(opath + "/ocean_mask.nc")
         
         return
     

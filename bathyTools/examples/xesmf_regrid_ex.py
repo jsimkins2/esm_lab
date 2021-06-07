@@ -5,20 +5,43 @@ import xesmf as xe
 import os
 
 
-gridFile="/Users/james/Documents/Github/esm_lab/gridTools/nep7_grid/ocean_hgrid.nc"
-#gridFile = "/Users/james/Downloads/gridFile.nc"
-bathFile="/Users/james/Downloads/gebco_2020_netcdf/GEBCO_2020.nc"
+#gridFile="/Users/james/Documents/Github/esm_lab/gridTools/nep7_grid/ocean_hgrid.nc"
+gridFile = "/Users/james/Downloads/gridFile.nc"
+topoFile="/Users/james/Downloads/gebco_2020_netcdf/GEBCO_2020.nc"
 gridGeoLoc = "corner"
-bathGeoLoc = "center"
-bathVarName = 'elevation'
+topoVarName = 'elevation'
 gridLatName = None
 gridLonName = None
-bathLatName = None
-bathLonName = None
+topoLatName = None
+topoLonName = None
 coarsenInt = 8
 grid = xr.open_dataset(gridFile)
+
 gridGeoLoc = 'corner'
 if gridGeoLoc == "center":
+    if 'nx' not in grid.dims:
+        if gridDimX != None:
+            grid = grid.rename_dims({gridDimX : "nx"})
+        elif 'lon' in grid.dims:
+            grid = grid.rename_dims({"lon" : "nx"})
+        elif 'longitude' in grid.dims:
+            grid = grid.rename_dims({"longitude" : "nx"})
+        elif 'x' in grid.dims:
+            grid = grid.rename_dims({"x" : "nx"})
+        else:
+            print ('Error: plase define gridDimX')
+    if 'ny' not in grid.dims:
+        if gridDimX != None:
+            grid = grid.rename_dims({gridDimY : "ny"})
+        elif 'lon' in grid.dims:
+            grid = grid.rename_dims({"lat" : "ny"})
+        elif 'longitude' in grid.dims:
+            grid = grid.rename_dims({"latitude" : "ny"})
+        elif 'y' in grid.dims:
+            grid = grid.rename_dims({"y" : "ny"})
+        else:
+            print ('Error: plase define gridDimY')
+    
     if 'lat_centers' not in grid.variables:
         if gridLatName != None:
             grid = grid.rename({gridLatName: 'lat_centers'})
@@ -99,6 +122,30 @@ if gridGeoLoc == "center":
     grid['lat_corners'] = xr.DataArray(data=filler_array, dims=("nyp", "nxp"))
     
 if gridGeoLoc == "corner":
+    # organize dimensions to nx ny nxp nyp
+    if 'nxp' not in grid.dims:
+        if gridDimX != None:
+            grid = grid.rename_dims({gridDimX : "nxp"})
+        elif 'lon' in grid.dims:
+            grid = grid.rename_dims({"lon" : "nxp"})
+        elif 'longitude' in grid.dims:
+            grid = grid.rename_dims({"longitude" : "nxp"})
+        elif 'x' in grid.dims:
+            grid = grid.rename_dims({"x" : "nxp"})
+        else:
+            print ('Error: plase define gridDimX')
+    if 'nyp' not in grid.dims:
+        if gridDimX != None:
+            grid = grid.rename_dims({gridDimY : "nyp"})
+        elif 'lon' in grid.dims:
+            grid = grid.rename_dims({"lat" : "nyp"})
+        elif 'longitude' in grid.dims:
+            grid = grid.rename_dims({"latitude" : "nyp"})
+        elif 'y' in grid.dims:
+            grid = grid.rename_dims({"y" : "nyp"})
+        else:
+            print ('Error: plase define gridDimY')
+            
     if 'lat_corners' not in grid.variables:
         if gridLatName != None:
             grid = grid.rename({gridLatName: 'lat_corners'})
@@ -156,35 +203,56 @@ if gridGeoLoc == "corner":
     
 
 # note here that we will automatically declare that the bath/topo grid is defined by the centers
+# TOPOGRAPHY XARRAY OBJECT ORGANIZATION
+# TOPOGRAPHY XARRAY OBJECT ORGANIZATION
+topo = xr.open_dataset(topoFile)
 
-bath = xr.open_dataset(bathFile)
-bath = bath.rename_dims({"lon" : "nx"})
-bath = bath.rename_dims({"lat" : "ny"})
-# coarsen bath file down 
-bath = bath.coarsen(nx=coarsenInt,ny=coarsenInt, boundary='pad').mean()
+if 'nx' not in topo.dims:
+    if topoDimX != None:
+        topo = topo.rename_dims({topoDimX : "nx"})
+    elif 'lon' in topo.dims:
+        topo = topo.rename_dims({"lon" : "nx"})
+    elif 'longitude' in topo.dims:
+        topo = topo.rename_dims({"longitude" : "nx"})
+    elif 'x' in topo.dims:
+        topo = topo.rename_dims({"x" : "nx"})
+    else:
+        print ('Error: plase define topoDimX')
+if 'ny' not in topo.dims:
+    if topoDimY != None:
+        topo = topo.rename_dims({topoDimY : "ny"})
+    elif 'lat' in topo.dims:
+        topo = topo.rename_dims({"lat" : "ny"})
+    elif 'latitude' in topo.dims:
+        topo = topo.rename_dims({"latitude" : "ny"})
+    elif 'y' in topo.dims:
+        topo = topo.rename_dims({"y" : "ny"})
+    else:
+        print ('Error: plase define topoDimY')
+        
+# coarsen topo file down based on coarsenInt
+topo = topo.coarsen(nx=coarsenInt,ny=coarsenInt, boundary='pad').mean()
 
-if 'lat_centers' not in bath.variables:
-    if bathLatName != None:
-        bath = bath.rename({bathLatName: 'lat_centers'})
-    elif 'y' in bath.variables:
-        bath = bath.rename({'y': 'lat_centers'})
-    elif 'lat' in bath.variables:
-        bath = bath.rename({'lat': 'lat_centers'})
-    elif 'latitude' in bath.variables:
-        bath = bath.rename({'latitude': 'lat_centers'})
+if 'lat_centers' not in topo.variables:
+    if topoLatName != None:
+        topo = topo.rename({topoLatName: 'lat_centers'})
+    elif 'y' in topo.variables:
+        topo = topo.rename({'y': 'lat_centers'})
+    elif 'lat' in topo.variables:
+        topo = topo.rename({'lat': 'lat_centers'})
+    elif 'latitude' in topo.variables:
+        topo = topo.rename({'latitude': 'lat_centers'})
     else:
         print('Error: please define gridlatname')
-
-        
-if 'lon_centers' not in bath.variables:
-    if bathLonName != None:
-        bath = bath.rename({bathLonName : 'lon_centers'})
-    elif 'x' in bath.variables:
-        bath = bath.rename({'x': 'lon_centers'})
-    elif 'lon' in bath.variables:
-        bath = bath.rename({'lon': 'lon_centers'})
+if 'lon_centers' not in topo.variables:
+    if topoLonName != None:
+        topo = topo.rename({topoLonName : 'lon_centers'})
+    elif 'x' in topo.variables:
+        topo = topo.rename({'x': 'lon_centers'})
+    elif 'lon' in topo.variables:
+        topo = topo.rename({'lon': 'lon_centers'})
     elif 'longitude' in grid.variables:
-        bath = bath.rename({'longitude': 'lon_centers'})
+        topo = topo.rename({'longitude': 'lon_centers'})
     else:
         print('Error: Please define gridLonName')
 
@@ -195,43 +263,23 @@ def find_nearest(array, value):
     idx = (np.abs(array - value)).argmin()
     return idx
 
-# fix longitudes from 0 to 360 for computation
-#if "lon_centers" in bath.coords:
-#    bath = bath.assign_coords(lon_centers=(np.where(bath['lon_centers'].values < 0., bath['lon_centers'].values + 360, bath['lon_centers'].values)))
-#    bath = bath.swap_dims({'lon_centers' : 'nx'})
-#if "lon_centers" in bath.data_vars:
-#    bath['lon_centers'].values =  np.where(bath['lon_centers'].values < 0., bath['lon_centers'].values + 360, bath['lon_centers'].values)
+latMinInd = find_nearest(array = topo.lat_centers.values, value = np.min(grid.lat_centers.values))
+latMaxInd = find_nearest(array = topo.lat_centers.values, value = np.max(grid.lat_centers.values))
+lonMinInd = find_nearest(array = topo.lon_centers.values, value = np.min(grid.lon_centers.values))
+lonMaxInd = find_nearest(array = topo.lon_centers.values, value = np.max(grid.lon_centers.values))
 
-
-latMinInd = find_nearest(array = bath.lat_centers.values, value = np.min(grid.lat_centers.values))
-latMaxInd = find_nearest(array = bath.lat_centers.values, value = np.max(grid.lat_centers.values))
-lonMinInd = find_nearest(array = bath.lon_centers.values, value = np.min(grid.lon_centers.values))
-lonMaxInd = find_nearest(array = bath.lon_centers.values, value = np.max(grid.lon_centers.values))
-
-# after we go 0-360 for longitude, the indices need to be swapped so we have a slice
 if lonMinInd > lonMaxInd:
     temp = lonMinInd
     lonMinInd = lonMaxInd
     lonMaxInd = temp
-# slice the large bathymetry file down to extents PLUS COARSEN INT as corners array should be 1 GREATER than centers array
-# calculate corners from this
-# still not sure if we need to do this step, but just keeping jst in case
 
-# slice the large bathymetry file down to the extents of the grid file + 1 on either side because we will slice down 2 points 
+# slice the large topography file down to the extents of the grid file + 1 on either side because we will slice down 2 points 
 # after the corner points are calculated
-bath = bath.isel(nx=slice(lonMinInd - 1, lonMaxInd + 1), ny=slice(latMinInd - 1, latMaxInd + 1))
+topo = topo.isel(nx=slice(lonMinInd - 1, lonMaxInd + 1), ny=slice(latMinInd - 1, latMaxInd + 1))
 
+lon_centers = topo['lon_centers'].values
+lat_centers = topo['lat_centers'].values
 
-
-
-
-lon_centers = bath['lon_centers'].values
-lat_centers = bath['lat_centers'].values
-
-# To use conservative regidding, we need the cells centers. 
-# Since they are not provided, we are creating some using a crude approximation. 
-# this works because our bathymetry file is a rectangular grid - 
-# otherwise the indexing of this step would like it does in the grid center point creation
 lon_corners = 0.25 * (
     lon_centers[:-1]
     + lon_centers[1:]
@@ -247,34 +295,32 @@ lat_corners = 0.25 * (
 )
 
 # trim down the centers so they are 1 less than the corner points we just calculated
-bath = bath.isel(nx=slice(1,-1), ny=slice(1,-1))
+topo = topo.isel(nx=slice(1,-1), ny=slice(1,-1))
 
-# extract the topo values because we will need to add them back in later
-# after we expand dimensions, the dimensions are added to teh elevation variable for soem reason
-elev = bath[bathVarName].values
+# extract the topo values and add them back later with proper dimensions
+elev = topo[topoVarName].values
 
 # add nxp and nyp dimensions for the lat/lon corners to latch onto
-bath = bath.expand_dims({'nyp':(len(bath.ny) + 1)})
-bath = bath.expand_dims({'nxp':(len(bath.nx) + 1)})
+topo = topo.expand_dims({'nyp':(len(topo.ny) + 1)})
+topo = topo.expand_dims({'nxp':(len(topo.nx) + 1)})
 
 # add the lat/lon corners as data variables
-bath['lat_corners'] = xr.DataArray(data=lat_corners, dims=("nyp"))
-bath['lon_corners'] = xr.DataArray(data=lon_corners, dims=("nxp"))
+topo['lat_corners'] = xr.DataArray(data=lat_corners, dims=("nyp"))
+topo['lon_corners'] = xr.DataArray(data=lon_corners, dims=("nxp"))
 
 # drop elevation and bring it back, this time constraining the dimensions to lat/lon centers
-bath = bath.drop_vars(bathVarName)
-bath[bathVarName] = (('ny', 'nx'), elev)
+topo = topo.drop_vars(topoVarName)
+topo[topoVarName] = (('ny', 'nx'), elev)
 
 
-# I am not sure if we need this curvilinear portion or not - test this
-# get 2D versions of the lat and lon variables
-lon2d, lat2d = np.meshgrid(bath.lon_centers.values, bath.lat_centers.values)
-lon2d_b, lat2d_b = np.meshgrid(bath.lon_corners.values, bath.lat_corners.values)
+lon2d, lat2d = np.meshgrid(topo.lon_centers.values, topo.lat_centers.values)
+lon2d_b, lat2d_b = np.meshgrid(topo.lon_corners.values, topo.lat_corners.values)
+
 # assign 2d coordinates as lat/lon 
-bath = bath.assign_coords({"lon" : (("ny", "nx"), lon2d)})
-bath = bath.assign_coords({"lat" : (("ny", "nx"), lat2d)})
-bath = bath.assign_coords({"lon_b" : (("nyp", "nxp"), lon2d_b)})
-bath = bath.assign_coords({"lat_b" : (("nyp", "nxp"), lat2d_b)})
+topo = topo.assign_coords({"lon" : (("ny", "nx"), lon2d)})
+topo = topo.assign_coords({"lat" : (("ny", "nx"), lat2d)})
+topo = topo.assign_coords({"lon_b" : (("nyp", "nxp"), lon2d_b)})
+topo = topo.assign_coords({"lat_b" : (("nyp", "nxp"), lat2d_b)})
 
 # rename for xesmf
 grid["lon"] = grid["lon_centers"]
@@ -282,32 +328,34 @@ grid["lat"] = grid["lat_centers"]
 grid["lon_b"] = grid["lon_corners"]
 grid["lat_b"] = grid["lat_corners"]
 
-#bath["lon"] = bath["lon_centers"]
-#bath["lat"] = bath["lat_centers"]
-#bath["lon_b"] = bath["lon_corners"]
-#bath["lat_b"] = bath["lat_corners"]
+
+# convert topography variable to a depth variable
+dr = topo[topoVarName]
+
+# x = ds.where(ds.elevation < 0.0000001)
+# x.elevation.values = x.elevation.values * -1
+# x = x.elevation.fillna(0)
 
 
-# create xarray data array of the bathymetry variable name containing the topographic elevation data
-dr = bath[bathVarName]
-
-# create land mask xarray dataarray
-lm_ds = bath[bathVarName].where(bath[bathVarName] < 0)
+# create ocean fraction array where ocean cells are 1 and land cells are 0
+lm_ds = topo[topoVarName].where(topo[topoVarName] < 0)
 lm_ds = lm_ds.fillna(0)
 lm_ds = lm_ds.where(lm_ds > -0.000001)
 lm_ds = lm_ds.fillna(1)
-lm_ds.name = 'ocean_fraction'
 
-# regrid our bathymetry and landmask
-regridder = xe.Regridder(bath, grid, method="conservative")
+
+# regrid our topography and land/ocean mask based on method
+regridder = xe.Regridder(topo, grid, method="conservative")
 dr_out = regridder(dr)
-lm_ds_out = regridder(lm_ds)
+lm_ds_out = regridder(lm_ds) 
+
 
 
 # coarsen the bathymetry and landmask fraction from supergrid to regular grid supergrid is True
 dr_out = dr_out.coarsen(nx=2,ny=2, boundary='pad').mean()
 lm_ds_out = lm_ds_out.coarsen(nx=2,ny=2, boundary='pad').mean()
 
+dr_out.plot()
 # save our netCDF files
 opath = os.path.dirname(gridFile)
 dr_out.to_netcdf(opath + "/ocean_topog.nc")
