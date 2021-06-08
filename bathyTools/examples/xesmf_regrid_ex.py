@@ -345,9 +345,9 @@ grid["lat"] = grid["lat_centers"]
 grid["lon_b"] = grid["lon_corners"]
 grid["lat_b"] = grid["lat_corners"]
 
-
+        
 # convert topography variable to a depth variable
-dr = topo[topoVarName]
+ds = topo[topoVarName]
 
 # x = ds.where(ds.elevation < 0.0000001)
 # x.elevation.values = x.elevation.values * -1
@@ -355,24 +355,39 @@ dr = topo[topoVarName]
 
 
 # create ocean fraction array where ocean cells are 1 and land cells are 0
+# happens before the regridder step because it will average cells based on land vs ocean
 lm_ds = topo[topoVarName].where(topo[topoVarName] < 0)
 lm_ds = lm_ds.fillna(0)
 lm_ds = lm_ds.where(lm_ds > -0.000001)
 lm_ds = lm_ds.fillna(1)
+lm_ds.name = 'mask'
+lm_ds.attrs['units'] = 'ocean fraction at T-cell centers'
 
 
 # regrid our topography and land/ocean mask based on method
-regridder = xe.Regridder(topo, grid, method="conservative", periodic=True)
-dr_out = regridder(dr)
+regridder = xe.Regridder(topo, grid, method="conservative", periodic=False)
+topo_out = regridder(ds)
 lm_ds_out = regridder(lm_ds) 
 
+# convert topography to depth
+#topo_out = topo_out.where(topo_out[topoVarName] < 0.0000001)
+#topo_out[topoVarName].values = topo_out[topoVarName].values * -1
+#topo_out = topo_out[topoVarName].fillna(0)
+#topo_out = topo_out.rename({topoVarName : 'depth'})
 
+topo_out = topo_out.where(topo_out < 0.0000001)
+topo_out.values = topo_out.values * -1
+topo_out = topo_out.fillna(0)
+topo_out.name = 'depth'
+topo_out.attrs['units'] = 'm'
+
+lm_ds_out.attrs['units'] = 'ocean fraction at T-cell centers'
 
 # coarsen the bathymetry and landmask fraction from supergrid to regular grid supergrid is True
-dr_out = dr_out.coarsen(nx=2,ny=2, boundary='pad').mean()
+topo_out = topo_out.coarsen(nx=2,ny=2, boundary='pad').mean()
 lm_ds_out = lm_ds_out.coarsen(nx=2,ny=2, boundary='pad').mean()
 
-dr_out.plot()
+topo_out.plot()
 # save our netCDF files
 opath = os.path.dirname(gridFile)
 dr_out.to_netcdf(opath + "/ocean_topog.nc")
@@ -381,5 +396,6 @@ lm_ds_out.to_netcdf(opath + "/ocean_mask.nc")
         
         
 
-        
-        
+fig = plt.figure()
+im = plt.pcolormesh(diff)        
+plt.colorbar(im)

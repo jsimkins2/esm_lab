@@ -19,7 +19,7 @@ class TopoUtils:
         return idx
 
     # Topography functions
-    def regridTopo(gridFile, topoFile, gridGeoLoc = "corner", topoVarName="elevation", coarsenInt=10, superGrid=True, gridDimX=None, gridDimY=None, gridLatName=None, gridLonName=None, topoDimX=None, topoDimY=None, topoLatName=None, topoLonName=None):
+    def regridTopo(gridFile, topoFile, gridGeoLoc = "corner", topoVarName="elevation", coarsenInt=10, superGrid=True, gridDimX=None, gridDimY=None, gridLatName=None, gridLonName=None, topoDimX=None, topoDimY=None, topoLatName=None, topoLonName=None, convert_to_depth=True):
         """Regrid topography file to the grid of a given grid file. It is assumed that the topography file is on a rectangular grid
         and has a finer resolution than the grid file. It is also assumed that the topography values are defined at the cell centers.
         We recommend using GEBCO2020 topography dataset for the topography file. It can be found here: https://www.gebco.net/data_and_products/gridded_bathymetry_data/
@@ -27,7 +27,7 @@ class TopoUtils:
         gridFile: Path to netCDF gridFile
         topoFile: Path to netCDF topography file
         gridGeoLoc: "center" or "corner" - cell location of geographic placement of grid file - for example, x/y are located at 'q' points, which are located at the corner of each cell
-        topoVarName: varialbe name of the topography variable within the topography file
+        topoVarName: variable name of the topography variable within the topography file. It is assumed that the variable represents elevation. If it is not representing elevation, please set 'convert_to_depth' to False. 
         coarsenInt: Integer value used to decrease resolution of a given topography file - see `xarray.coarsen`
         superGrid: When true, this assumes the gridFile is a supergrid and the resulting topography is coarsened to a regular grid.
         gridDimX: The name of the dimension along the X axis of the grid file
@@ -327,7 +327,13 @@ class TopoUtils:
         grid["lon_b"] = grid["lon_corners"]
         grid["lat_b"] = grid["lat_corners"]
 
+        # convert to depth
         
+        topo = topo.where(topo.elevation < 0.0000001)
+        topo[topoVarName].values = topo[topoVarName].values * -1
+        topo = topo[topoVarName].fillna(0)
+        topo[topoVarName] = 
+
         # create xarray data array of the topography variable name containing the topographic elevation data
         dr = topo[topoVarName]
         
