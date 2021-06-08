@@ -92,6 +92,13 @@ class TopoUtils:
                 else:
                     print('Error: Please define gridLonName')
             
+            # fix longitude from -180 to 180
+            if "lon_corners" in grid.coords:
+                grid = grid.assign_coords(lon_corners=(np.where(grid['lon_corners'].values > 180., grid['lon_corners'].values - 360, grid['lon_corners'].values)))
+                grid = grid.swap_dims({'lon_corners' : 'nxp'})    
+            if "lon_corners" in grid.data_vars:
+                grid['lon_corners'].values =  np.where(grid['lon_corners'].values > 180., grid['lon_corners'].values - 360, grid['lon_corners'].values)
+
             
             lon_centers = grid['lon_centers'].values
             lat_centers = grid['lat_centers'].values
@@ -184,7 +191,14 @@ class TopoUtils:
                     grid= grid.rename({'longitude': 'lon_corners'})
                 else:
                     print('Error: Please define gridLonName')
-            
+                
+            # fix longitude from -180 to 180
+            if "lon_corners" in grid.coords:
+                grid = grid.assign_coords(lon_corners=(np.where(grid['lon_corners'].values > 180., grid['lon_corners'].values - 360, grid['lon_corners'].values)))
+                grid = grid.swap_dims({'lon_corners' : 'nxp'})    
+            if "lon_corners" in grid.data_vars:
+                grid['lon_corners'].values =  np.where(grid['lon_corners'].values > 180., grid['lon_corners'].values - 360, grid['lon_corners'].values)
+
 
             lon_corners = grid['lon_corners'].values
             lat_corners = grid['lat_corners'].values
@@ -262,6 +276,13 @@ class TopoUtils:
             else:
                 print('Error: Please define gridLonName')
 
+        # if longitudes are 0 to 360, convert to -180 to 180
+        if "lon_centers" in topo.coords:
+            topo = topo.assign_coords(lon_centers=(np.where(topo['lon_centers'].values > 180., topo['lon_centers'].values - 360, topo['lon_centers'].values)))
+            topo = topo.swap_dims({'lon_centers' : 'nx'})
+        if "lon_centers" in topo.data_vars:
+            topo['lon_centers'].values =  np.where(topo['lon_centers'].values > 180., topo['lon_centers'].values - 360, topo['lon_centers'].values)
+
         latMinInd = find_nearest(array = topo.lat_centers.values, value = np.min(grid.lat_centers.values))
         latMaxInd = find_nearest(array = topo.lat_centers.values, value = np.max(grid.lat_centers.values))
         lonMinInd = find_nearest(array = topo.lon_centers.values, value = np.min(grid.lon_centers.values))
@@ -327,28 +348,30 @@ class TopoUtils:
         grid["lon_b"] = grid["lon_corners"]
         grid["lat_b"] = grid["lat_corners"]
 
-        # convert to depth
-        
-        topo = topo.where(topo.elevation < 0.0000001)
-        topo[topoVarName].values = topo[topoVarName].values * -1
-        topo = topo[topoVarName].fillna(0)
-        topo[topoVarName] = 
-
         # create xarray data array of the topography variable name containing the topographic elevation data
-        dr = topo[topoVarName]
+        ds = topo[topoVarName]
         
         # create ocean fraction array where ocean cells are 1 and land cells are 0
         lm_ds = topo[topoVarName].where(topo[topoVarName] < 0)
         lm_ds = lm_ds.fillna(0)
         lm_ds = lm_ds.where(lm_ds > -0.000001)
         lm_ds = lm_ds.fillna(1)
-        
-        
+        lm_ds.name = 'mask'
+        lm_ds.attrs['units'] = 'ocean fraction at T-cell centers'
+
         # regrid our topography and land/ocean mask based on method
         regridder = xe.Regridder(topo, grid, method="conservative", periodic=True)
-        dr_out = regridder(dr)
-        lm_ds_out = regridder(lm_ds)
+        topo_out = regridder(ds)
+        lm_ds_out = regridder(lm_ds) 
         
+        topo_out = topo_out.where(topo_out < 0.0000001)
+        topo_out.values = topo_out.values * -1
+        topo_out = topo_out.fillna(0)
+        topo_out.name = 'depth'
+        topo_out.attrs['units'] = 'm'
+        
+        lm_ds_out.attrs['units'] = 'ocean fraction at T-cell centers'
+
         # coarsen the topography and landmask fraction from supergrid to regular grid supergrid is True
         dr_out = dr_out.coarsen(nx=2,ny=2, boundary='pad').mean()
         lm_ds_out = lm_ds_out.coarsen(nx=2,ny=2, boundary='pad').mean()

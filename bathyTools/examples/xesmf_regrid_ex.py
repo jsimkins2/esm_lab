@@ -69,13 +69,12 @@ if gridGeoLoc == "center":
         else:
             print('Error: Please define gridLonName')
     
-    # NOTE THAT DOING 0-360 DEGREES FOR COMPUTATION OF LONGITUDES WILL CAUSE REGRIDDER TO FAILLLLLLL
-    # fix longitudes from 0 to 360 for computation
-   # if "lon_corners" in grid.coords:
-    #    grid = grid.assign_coords(lon_corners=(np.where(grid['lon_corners'].values < 0., grid['lon_corners'].values + 360, grid['lon_corners'].values)))
-      #  grid = grid.swap_dims({'lon_corners' : 'nxp'})    
-   # if "lon_corners" in grid.data_vars:
-     #   grid['lon_corners'].values =  np.where(grid['lon_corners'].values < 0., grid['lon_corners'].values + 360, grid['lon_corners'].values)
+    # fix longitude from -180 to 180
+    if "lon_corners" in grid.coords:
+        grid = grid.assign_coords(lon_corners=(np.where(grid['lon_corners'].values > 180., grid['lon_corners'].values - 360, grid['lon_corners'].values)))
+        grid = grid.swap_dims({'lon_corners' : 'nxp'})    
+    if "lon_corners" in grid.data_vars:
+        grid['lon_corners'].values =  np.where(grid['lon_corners'].values > 180., grid['lon_corners'].values - 360, grid['lon_corners'].values)
 
     lon_centers = grid['lon_centers'].values
     lat_centers = grid['lat_centers'].values
@@ -180,13 +179,12 @@ if gridGeoLoc == "corner":
         else:
             print('Error: Please define gridLonName')
 
-    # NOTE THAT DOING 0-360 DEGREES FOR COMPUTATION OF LONGITUDES WILL CAUSE REGRIDDER TO FAILLLLLLL
-    # fix longitudes from 0 to 360 for computation
-   # if "lon_corners" in grid.coords:
-    #    grid = grid.assign_coords(lon_corners=(np.where(grid['lon_corners'].values < 0., grid['lon_corners'].values + 360, grid['lon_corners'].values)))
-    #    grid = grid.swap_dims({'lon_corners' : 'nxp'})    
-   # if "lon_corners" in grid.data_vars:
-    #    grid['lon_corners'].values =  np.where(grid['lon_corners'].values < 0., grid['lon_corners'].values + 360, grid['lon_corners'].values)
+    # fix longitude from -180 to 180
+    if "lon_corners" in grid.coords:
+        grid = grid.assign_coords(lon_corners=(np.where(grid['lon_corners'].values > 180., grid['lon_corners'].values - 360, grid['lon_corners'].values)))
+        grid = grid.swap_dims({'lon_corners' : 'nxp'})    
+    if "lon_corners" in grid.data_vars:
+        grid['lon_corners'].values =  np.where(grid['lon_corners'].values > 180., grid['lon_corners'].values - 360, grid['lon_corners'].values)
 
     lon_corners = grid['lon_corners'].values
     lat_corners = grid['lat_corners'].values
@@ -272,12 +270,12 @@ def find_nearest(array, value):
     idx = (np.abs(array - value)).argmin()
     return idx
 
-# fix longitudes from 0 to 360 for computation
-#if "lon_centers" in topo.coords:
-#    topo = topo.assign_coords(lon_centers=(np.where(topo['lon_centers'].values < 0., topo['lon_centers'].values + 360, topo['lon_centers'].values)))
-#    topo = topo.swap_dims({'lon_centers' : 'nx'})
-#if "lon_centers" in topo.data_vars:
-#    topo['lon_centers'].values =  np.where(topo['lon_centers'].values < 0., topo['lon_centers'].values + 360, topo['lon_centers'].values)
+# if longitudes are 0 to 360, convert to -180 to 180
+if "lon_centers" in topo.coords:
+    topo = topo.assign_coords(lon_centers=(np.where(topo['lon_centers'].values > 180., topo['lon_centers'].values - 360, topo['lon_centers'].values)))
+    topo = topo.swap_dims({'lon_centers' : 'nx'})
+if "lon_centers" in topo.data_vars:
+    topo['lon_centers'].values =  np.where(topo['lon_centers'].values > 180., topo['lon_centers'].values - 360, topo['lon_centers'].values)
 
 
 latMinInd = find_nearest(array = topo.lat_centers.values, value = np.min(grid.lat_centers.values))
@@ -329,7 +327,7 @@ topo['lon_corners'] = xr.DataArray(data=lon_corners, dims=("nxp"))
 topo = topo.drop_vars(topoVarName)
 topo[topoVarName] = (('ny', 'nx'), elev)
 
-
+# make lat/lons 2 dimensions just like the grids wewe are matching to
 lon2d, lat2d = np.meshgrid(topo.lon_centers.values, topo.lat_centers.values)
 lon2d_b, lat2d_b = np.meshgrid(topo.lon_corners.values, topo.lat_corners.values)
 
