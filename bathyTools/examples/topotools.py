@@ -375,8 +375,9 @@ class TopoUtils:
         lm_ds_out.attrs['units'] = 'ocean fraction at T-cell centers'
 
         # coarsen the topography and landmask fraction from supergrid to regular grid supergrid is True
-        topo_out = topo_out.coarsen(nx=2,ny=2, boundary='pad').mean()
-        lm_ds_out = lm_ds_out.coarsen(nx=2,ny=2, boundary='pad').mean()
+        if superGrid == True:
+            topo_out = topo_out.coarsen(nx=2,ny=2, boundary='pad').mean()
+            lm_ds_out = lm_ds_out.coarsen(nx=2,ny=2, boundary='pad').mean()
         
         print(datetime.datetime.now())
         # save our netCDF files
