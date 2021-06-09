@@ -10,13 +10,15 @@ gridFile="/Users/james/Documents/Github/esm_lab/gridTools/nep7_grid/ocean_hgrid.
 topoFile="/Users/james/Downloads/gebco_2020_netcdf/GEBCO_2020.nc"
 gridGeoLoc = "corner"
 topoVarName = 'elevation'
+periodic=True
+method='conservative'
 gridLatName = None
 gridLonName = None
 topoLatName = None
 topoLonName = None
 topoDimX = None
 topoDimY = None
-coarsenInt = 5
+coarsenInt = 8
 grid = xr.open_dataset(gridFile)
 
 gridGeoLoc = 'corner'
@@ -71,10 +73,12 @@ if gridGeoLoc == "center":
     
     # fix longitude from -180 to 180
     if "lon_corners" in grid.coords:
-        grid = grid.assign_coords(lon_corners=(np.where(grid['lon_corners'].values > 180., grid['lon_corners'].values - 360, grid['lon_corners'].values)))
+        grid = grid.assign_coords(lon_corners=(np.where(grid['lon_corners'].values > 180., grid['lon_corners'].values - 360, 
+                                                        grid['lon_corners'].values)))
         grid = grid.swap_dims({'lon_corners' : 'nxp'})    
     if "lon_corners" in grid.data_vars:
-        grid['lon_corners'].values =  np.where(grid['lon_corners'].values > 180., grid['lon_corners'].values - 360, grid['lon_corners'].values)
+        grid['lon_corners'].values =  np.where(grid['lon_corners'].values > 180., grid['lon_corners'].values - 360, 
+                                               grid['lon_corners'].values)
 
     lon_centers = grid['lon_centers'].values
     lat_centers = grid['lat_centers'].values
@@ -181,10 +185,12 @@ if gridGeoLoc == "corner":
 
     # fix longitude from -180 to 180
     if "lon_corners" in grid.coords:
-        grid = grid.assign_coords(lon_corners=(np.where(grid['lon_corners'].values > 180., grid['lon_corners'].values - 360, grid['lon_corners'].values)))
+        grid = grid.assign_coords(lon_corners=(np.where(grid['lon_corners'].values > 180., grid['lon_corners'].values - 360, 
+                                                        grid['lon_corners'].values)))
         grid = grid.swap_dims({'lon_corners' : 'nxp'})    
     if "lon_corners" in grid.data_vars:
-        grid['lon_corners'].values =  np.where(grid['lon_corners'].values > 180., grid['lon_corners'].values - 360, grid['lon_corners'].values)
+        grid['lon_corners'].values =  np.where(grid['lon_corners'].values > 180., grid['lon_corners'].values - 360, 
+                                               grid['lon_corners'].values)
 
     lon_corners = grid['lon_corners'].values
     lat_corners = grid['lat_corners'].values
@@ -272,7 +278,8 @@ def find_nearest(array, value):
 
 # if longitudes are 0 to 360, convert to -180 to 180
 if "lon_centers" in topo.coords:
-    topo = topo.assign_coords(lon_centers=(np.where(topo['lon_centers'].values > 180., topo['lon_centers'].values - 360, topo['lon_centers'].values)))
+    topo = topo.assign_coords(lon_centers=(np.where(topo['lon_centers'].values > 180., topo['lon_centers'].values - 360, 
+                                                    topo['lon_centers'].values)))
     topo = topo.swap_dims({'lon_centers' : 'nx'})
 if "lon_centers" in topo.data_vars:
     topo['lon_centers'].values =  np.where(topo['lon_centers'].values > 180., topo['lon_centers'].values - 360, topo['lon_centers'].values)
@@ -363,7 +370,7 @@ lm_ds.attrs['units'] = 'ocean fraction at T-cell centers'
 
 
 # regrid our topography and land/ocean mask based on method
-regridder = xe.Regridder(topo, grid, method="conservative", periodic=False)
+regridder = xe.Regridder(topo, grid, method=method, periodic=periodic)
 topo_out = regridder(ds)
 lm_ds_out = regridder(lm_ds) 
 
@@ -385,7 +392,9 @@ lm_ds_out.attrs['units'] = 'ocean fraction at T-cell centers'
 topo_out = topo_out.coarsen(nx=2,ny=2, boundary='pad').mean()
 lm_ds_out = lm_ds_out.coarsen(nx=2,ny=2, boundary='pad').mean()
 
+import matplotlib.pyplot as plt
 topo_out.plot()
+plt.title("periodic true")
 # save our netCDF files
 opath = os.path.dirname(gridFile)
 dr_out.to_netcdf(opath + "/ocean_topog.nc")

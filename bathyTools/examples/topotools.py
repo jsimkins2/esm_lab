@@ -19,7 +19,7 @@ class TopoUtils:
         return idx
 
     # Topography functions
-    def regridTopo(gridFile, topoFile, gridGeoLoc = "corner", topoVarName="elevation", coarsenInt=10, superGrid=True, gridDimX=None, gridDimY=None, gridLatName=None, gridLonName=None, topoDimX=None, topoDimY=None, topoLatName=None, topoLonName=None, convert_to_depth=True):
+    def regridTopo(gridFile, topoFile, gridGeoLoc = "corner", topoVarName="elevation", coarsenInt=10, method='conservative', superGrid=True, periodic=True, gridDimX=None, gridDimY=None, gridLatName=None, gridLonName=None, topoDimX=None, topoDimY=None, topoLatName=None, topoLonName=None, convert_to_depth=True):
         """Regrid topography file to the grid of a given grid file. It is assumed that the topography file is on a rectangular grid
         and has a finer resolution than the grid file. It is also assumed that the topography values are defined at the cell centers.
         We recommend using GEBCO2020 topography dataset for the topography file. It can be found here: https://www.gebco.net/data_and_products/gridded_bathymetry_data/
@@ -30,6 +30,8 @@ class TopoUtils:
         topoVarName: variable name of the topography variable within the topography file. It is assumed that the variable represents elevation. If it is not representing elevation, please set 'convert_to_depth' to False. 
         coarsenInt: Integer value used to decrease resolution of a given topography file - see `xarray.coarsen`
         superGrid: When true, this assumes the gridFile is a supergrid and the resulting topography is coarsened to a regular grid.
+        method: Regrid method of xesmf regridder. Options are 'conservative', 'bilinear', 'nearests2d', 'nearestd2s', 'patch' - options can be read about here https://pangeo-xesmf.readthedocs.io/en/latest/notebooks/Compare_algorithms.html
+        periodic: Boolean, either True or False - When dealing with global grids, we need to set periodic=True, otherwise data along the meridian line will be missing.
         gridDimX: The name of the dimension along the X axis of the grid file
         gridDimY: The name of the dimension along the Y axis of the grid file
         gridLatName: The name of the latitude variable of the grid file
@@ -360,7 +362,7 @@ class TopoUtils:
         lm_ds.attrs['units'] = 'ocean fraction at T-cell centers'
 
         # regrid our topography and land/ocean mask based on method
-        regridder = xe.Regridder(topo, grid, method="conservative", periodic=True)
+        regridder = xe.Regridder(topo, grid, method=method, periodic=periodic)
         topo_out = regridder(ds)
         lm_ds_out = regridder(lm_ds) 
         
@@ -373,13 +375,14 @@ class TopoUtils:
         lm_ds_out.attrs['units'] = 'ocean fraction at T-cell centers'
 
         # coarsen the topography and landmask fraction from supergrid to regular grid supergrid is True
-        dr_out = dr_out.coarsen(nx=2,ny=2, boundary='pad').mean()
+        topo_out = topo_out.coarsen(nx=2,ny=2, boundary='pad').mean()
         lm_ds_out = lm_ds_out.coarsen(nx=2,ny=2, boundary='pad').mean()
         
+        print(datetime.datetime.now())
         # save our netCDF files
         opath = os.path.dirname(gridFile)
         #dr_out.plot()
-        dr_out.to_netcdf(opath + "/ocean_topog.nc")
+        topo_out.to_netcdf(opath + "/ocean_topog.nc")
         lm_ds_out.to_netcdf(opath + "/ocean_mask.nc")
         
         return
