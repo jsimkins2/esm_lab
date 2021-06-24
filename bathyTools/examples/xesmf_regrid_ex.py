@@ -5,8 +5,8 @@ import xesmf as xe
 import os
 
 
-gridFile="/Users/james/Documents/Github/esm_lab/gridTools/nep7_grid/ocean_hgrid.nc"
-#gridFile = "/Users/james/Downloads/gridFile.nc"
+#gridFile="/Users/james/Documents/Github/esm_lab/gridTools/nep7_grid/ocean_hgrid.nc"
+gridFile = "/Users/james/Downloads/gridFile.nc"
 topoFile="/Users/james/Downloads/gebco_2020_netcdf/GEBCO_2020.nc"
 gridGeoLoc = "corner"
 topoVarName = 'elevation'
@@ -244,7 +244,7 @@ if 'ny' not in topo.dims:
         print ('Error: plase define topoDimY')
         
 # coarsen topo file down based on coarsenInt
-topo = topo.coarsen(nx=coarsenInt,ny=coarsenInt, boundary='pad').mean()
+topo = topo.coarsen(nx=coarsenInt,ny=coarsenInt, boundary='pad').median()
 
 if 'lat_centers' not in topo.variables:
     if topoLatName != None:
@@ -368,12 +368,14 @@ lm_ds = lm_ds.fillna(1)
 lm_ds.name = 'mask'
 lm_ds.attrs['units'] = 'ocean fraction at T-cell centers'
 
-
+method = 'conservative'
 # regrid our topography and land/ocean mask based on method
 regridder = xe.Regridder(topo, grid, method=method, periodic=periodic)
 topo_out = regridder(ds)
 lm_ds_out = regridder(lm_ds) 
 
+#lm_ds_out.plot()
+#plt.title("periodic false")
 # convert topography to depth
 #topo_out = topo_out.where(topo_out[topoVarName] < 0.0000001)
 #topo_out[topoVarName].values = topo_out[topoVarName].values * -1
@@ -389,7 +391,7 @@ topo_out.attrs['units'] = 'm'
 lm_ds_out.attrs['units'] = 'ocean fraction at T-cell centers'
 
 # coarsen the bathymetry and landmask fraction from supergrid to regular grid supergrid is True
-topo_out = topo_out.coarsen(nx=2,ny=2, boundary='pad').mean()
+topo_out = topo_out.coarsen(nx=2,ny=2, boundary='pad').median()
 lm_ds_out = lm_ds_out.coarsen(nx=2,ny=2, boundary='pad').mean()
 
 import matplotlib.pyplot as plt
