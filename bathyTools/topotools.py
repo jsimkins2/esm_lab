@@ -17,8 +17,128 @@ class TopoUtils:
         array = np.asarray(array)
         idx = (np.abs(array - value)).argmin()
         return idx
-
+    
     # Topography functions
+    def numpyRegridder(gridXr, topoXr, topoVarName='elevation',numMethod='median', superGrid=True):
+        """
+        Regrid topography file to the grid of a given grid file using numpy. Available for 'median' and 'mean' methods. For each grid cell of the grid file, the corners of the cell are used as a bounding box for the higher resolution topography file. Once the cell has been geopositioned on the topography file, the 'median' or 'mean' is calculated and the value is subsequently placed in the grid file grid cell. It is also assumed that the topography values are defined at the cell centers. We recommend using GEBCO2020 topography dataset for the topography file. It can be found here: https://www.gebco.net/data_and_products/gridded_bathymetry_data/
+        
+        gridXr: grid xarray object with appropriate organization (lat/lon centers/corners defined with nx/ny nxp/nyp dimensions - this happens automatically within regridTopo())
+        topoXr: topography xarray object (lat/lon centers/corners defined with nx/ny nxp/nyp dimensions - this happens automatically within regridTopo())
+        numMethod: Numpy method for calculation - 'median', 'mean' are currently supported operations.
+        superGrid: When true, this assumes the gridFile is a supergrid and the resulting topography is coarsened to a regular grid.
+        """
+        njp = gridXr.dims['nyp']
+        nip = gridXr.dims['nxp']
+    
+        if superGrid==True:
+            superInt=2
+        else:
+            superInt=1
+        topo_out = xr.Dataset({
+            topoVarName: xr.DataArray(
+                        data   = np.zeros((len(range(0,gridXr.dims['ny'],superInt)), len(range(0,gridXr.dims['nx'],superInt)))),   # enter data here
+                        dims   = ['ny', 'nx'],
+                        attrs  = {
+                            'units'     : 'm'
+                            }
+                        ),
+            'landmask': xr.DataArray(
+                        data   = np.zeros((len(range(0,gridXr.dims['ny'],superInt)), len(range(0,gridXr.dims['nx'],superInt)))),   # enter data here
+                        dims   = ['ny', 'nx'],
+                        attrs  = {
+                            'units'     : 'ocean fraction at T Cell Centers'
+                            }
+                        ),
+            'lon_corners': xr.DataArray( 
+                    data   = gridXr['lon_corners'].values[::superInt,::superInt],   # enter data here
+                    dims   = ['nyp', 'nxp'],
+                    attrs  = {
+                        'units'     : 'degrees'
+                        }
+                    ),
+            'lat_corners': xr.DataArray(
+                    data   = gridXr['lat_corners'].values[::superInt,::superInt],   # enter data here
+                    dims   = ['nyp', 'nxp'],
+                    attrs  = {
+                        'units'     : 'degrees'
+                        }
+                    ),
+            'lon_centers': xr.DataArray( 
+                    data   = gridXr['lon_centers'].values[::superInt,::superInt],   # enter data here
+                    dims   = ['ny', 'nx'],
+                    attrs  = {
+                        'units'     : 'degrees'
+                        }
+                    ),
+            'lat_centers': xr.DataArray(
+                    data   = gridXr['lat_centers'].values[::superInt,::superInt],   # enter data here
+                    dims   = ['ny', 'nx'],
+                    attrs  = {
+                        'units'     : 'degrees'
+                        }
+                    )},
+                #attrs = {'projection': gridXr.attrs['projection']}
+            )
+
+        for i in range(0,nip-1,superInt):
+            for j in range(0,njp-1,superInt):
+                latMinInd = find_nearest(array = topoXr['lat_corners'].values, value = gridXr['lat_corners'].values[j,i])
+                latMaxInd = find_nearest(array = topoXr['lat_corners'].values, value = gridXr['lat_corners'].values[j+1,i+1])
+                lonMinInd = find_nearest(array = topoXr['lon_corners'].values, value = gridXr['lon_corners'].values[j,i])
+                lonMaxInd = find_nearest(array = topoXr['lon_corners'].values, value = gridXr['lon_corners'].values[j+1,i+1])
+
+                # clause in case we are dealing with datasets stored backwards - this matters because of the slice order xarray requires
+                if lonMinInd > lonMaxInd:
+                    tem_ind = lonMinInd
+                    lonMinInd = lonMaxInd
+                    lonMaxInd = tem_ind
+
+                # select bounding box for the topography dataset based on indices of the gridXr file corners - perform desired computation (median, mean, min, max) on matrix 
+                if numMethod=='median':
+                    tem_topo = np.median(topoXr[topoVarName].isel(nx=slice(lonMinInd, lonMaxInd), ny=slice(latMinInd, latMaxInd)).values)
+                    tem_lm = np.median(topoXr['landmask'].isel(nx=slice(lonMinInd, lonMaxInd), ny=slice(latMinInd, latMaxInd)).values)
+
+                    # corner values may not be filled. If they aren't, use the indice differences to expand our topography bounding box search 
+                    if np.isnan(tem_topo):
+                        try:
+                            lonMinInd = lonMaxInd
+                            lonMaxInd = lonMaxInd + lonDiffInd
+                            latMinInd = latMaxInd
+                            latMaxInd = latMaxInd + latDiffInd
+                            tem_topo = np.median(topoXr[topoVarName].isel(nx=slice(lonMinInd, lonMaxInd), ny=slice(latMinInd, latMaxInd)).values)
+                            tem_lm = np.median(topoXr['landmask'].isel(nx=slice(lonMinInd, lonMaxInd), ny=slice(latMinInd, latMaxInd)).values)
+                        except:
+                            pass
+
+                if numMethod=='mean':
+                    tem_topo = np.mean(topoXr[topoVarName].isel(nx=slice(lonMinInd, lonMaxInd), ny=slice(latMinInd, latMaxInd)).values)
+                    tem_lm = np.mean(topoXr['landmask'].isel(nx=slice(lonMinInd, lonMaxInd), ny=slice(latMinInd, latMaxInd)).values)
+
+                    # corner values may not be filled. If they aren't, use the indice differences to expand our topography bounding box search 
+                    if np.isnan(tem_topo) == True:
+                        try:
+                            lonMinInd = lonMaxInd
+                            lonMaxInd = lonMaxInd + lonDiffInd
+                            latMinInd = latMaxInd
+                            latMaxInd = latMaxInd + latDiffInd
+                            tem_topo = np.mean(topoXr[topoVarName].isel(nx=slice(lonMinInd, lonMaxInd), ny=slice(latMinInd, latMaxInd)).values)
+                            tem_lm = np.mean(topoXr['landmask'].isel(nx=slice(lonMinInd, lonMaxInd), ny=slice(latMinInd, latMaxInd)).values)
+                        except:
+                            pass
+
+                oj = int(j/superInt)
+                oi = int(i/superInt)
+                topo_out[topoVarName][oj,oi] = tem_topo
+                topo_out['landmask'][oj,oi] = tem_lm
+
+                # capture the index differences in case we reach the corner of a dataset and need to 'expand' our topography grid to fill the holes
+                latDiffInd = abs(latMaxInd - latMinInd)
+                lonDiffInd = abs(lonMaxInd - lonMinInd)
+                
+        return topo_out
+    
+
     def regridTopo(gridFile, topoFile, gridGeoLoc = "corner", topoVarName="elevation", coarsenInt=10, method='conservative', superGrid=True, periodic=True, gridDimX=None, gridDimY=None, gridLatName=None, gridLonName=None, topoDimX=None, topoDimY=None, topoLatName=None, topoLonName=None, convert_to_depth=True):
         """Regrid topography file to the grid of a given grid file. It is assumed that the topography file is on a rectangular grid
         and has a finer resolution than the grid file. It is also assumed that the topography values are defined at the cell centers.
@@ -30,7 +150,7 @@ class TopoUtils:
         topoVarName: variable name of the topography variable within the topography file. It is assumed that the variable represents elevation. If it is not representing elevation, please set 'convert_to_depth' to False. 
         coarsenInt: Integer value used to decrease resolution of a given topography file - see `xarray.coarsen`
         superGrid: When true, this assumes the gridFile is a supergrid and the resulting topography is coarsened to a regular grid.
-        method: Regrid method of xesmf regridder. Options are 'conservative', 'bilinear', 'nearests2d', 'nearestd2s', 'patch' - options can be read about here https://pangeo-xesmf.readthedocs.io/en/latest/notebooks/Compare_algorithms.html
+        method: Regrid method for regridTopo. Options include 'median', 'mean', 'conservative', 'bilinear', 'nearests2d', 'nearestd2s', and 'patch'. 'median' and 'mean' methods take the respective computation of the higher resolution topography dataset and regrid to the supplied grid. 'conservative', 'bilinear', 'nearests2d', 'nearestd2s', 'patch' use xesmf regridder options which can be read about here -  https://pangeo-xesmf.readthedocs.io/en/latest/notebooks/Compare_algorithms.html
         periodic: Boolean, either True or False - When dealing with global grids, we need to set periodic=True, otherwise data along the meridian line will be missing.
         gridDimX: The name of the dimension along the X axis of the grid file
         gridDimY: The name of the dimension along the Y axis of the grid file
@@ -360,26 +480,34 @@ class TopoUtils:
         lm_ds = lm_ds.fillna(1)
         lm_ds.name = 'mask'
         lm_ds.attrs['units'] = 'ocean fraction at T-cell centers'
+        
+        # add landmask to the topography dataset - this is only for numpyRegridder
+        topo['landmask'] = (('ny', 'nx'), lm_ds)
 
         # regrid our topography and land/ocean mask based on method
-        regridder = xe.Regridder(topo, grid, method=method, periodic=periodic)
-        topo_out = regridder(ds)
-        lm_ds_out = regridder(lm_ds) 
+        if method=='median' or 'mean':
+            npRegridder_out = numpyRegridder(gridXr=grid, topoXr=topo, topoVarName=topoVarName, numMethod=method, superGrid=superGrid)
+            topo_out = npRegridder_out[topoVarName]
+            lm_ds_out = npRegridder_out['landmask']
+            
+        if method=='conservative' or 'bilinear' or 'nearests2d' or 'nearestd2s' or 'patch':
+            regridder = xe.Regridder(topo, grid, method=method, periodic=periodic)
+            topo_out = regridder(ds)
+            lm_ds_out = regridder(lm_ds)
+            # coarsen the topography and landmask fraction from supergrid to regular grid supergrid is True
+            if superGrid==True:
+                topo_out = topo_out.coarsen(nx=2,ny=2, boundary='pad').mean()
+                lm_ds_out = lm_ds_out.coarsen(nx=2,ny=2, boundary='pad').mean()
         
-        topo_out = topo_out.where(topo_out < 0.0000001)
-        topo_out.values = topo_out.values * -1
-        topo_out = topo_out.fillna(0)
-        topo_out.name = 'depth'
-        topo_out.attrs['units'] = 'm'
+        if convert_to_depth==True:
+            topo_out = topo_out.where(topo_out < 0.0000001)
+            topo_out.values = topo_out.values * -1
+            topo_out = topo_out.fillna(0)
+            topo_out.name = 'depth'
+            topo_out.attrs['units'] = 'm'
         
         lm_ds_out.attrs['units'] = 'ocean fraction at T-cell centers'
 
-        # coarsen the topography and landmask fraction from supergrid to regular grid supergrid is True
-        if superGrid == True:
-            topo_out = topo_out.coarsen(nx=2,ny=2, boundary='pad').mean()
-            lm_ds_out = lm_ds_out.coarsen(nx=2,ny=2, boundary='pad').mean()
-        
-        print(datetime.datetime.now())
         # save our netCDF files
         opath = os.path.dirname(gridFile)
         #dr_out.plot()
