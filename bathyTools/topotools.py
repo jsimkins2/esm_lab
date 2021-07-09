@@ -314,11 +314,13 @@ class TopoUtils:
                 else:
                     print('Error: Please define gridLonName')
                 
-            # fix longitude from -180 to 180
+            
             if "lon_corners" in grid.coords:
+                # fix longitude from -180 to 180
                 grid = grid.assign_coords(lon_corners=(np.where(grid['lon_corners'].values > 180., grid['lon_corners'].values - 360, grid['lon_corners'].values)))
                 grid = grid.swap_dims({'lon_corners' : 'nxp'})    
             if "lon_corners" in grid.data_vars:
+                # fix longitude from -180 to 180
                 grid['lon_corners'].values =  np.where(grid['lon_corners'].values > 180., grid['lon_corners'].values - 360, grid['lon_corners'].values)
 
 
@@ -398,13 +400,15 @@ class TopoUtils:
             else:
                 print('Error: Please define gridLonName')
 
-        # if longitudes are 0 to 360, convert to -180 to 180
+        
         if "lon_centers" in topo.coords:
+            # if longitudes are 0 to 360, convert to -180 to 180
             topo = topo.assign_coords(lon_centers=(np.where(topo['lon_centers'].values > 180., topo['lon_centers'].values - 360, topo['lon_centers'].values)))
             topo = topo.swap_dims({'lon_centers' : 'nx'})
         if "lon_centers" in topo.data_vars:
+            # if longitudes are 0 to 360, convert to -180 to 180
             topo['lon_centers'].values =  np.where(topo['lon_centers'].values > 180., topo['lon_centers'].values - 360, topo['lon_centers'].values)
-
+            
         latMinInd = find_nearest(array = topo.lat_centers.values, value = np.min(grid.lat_centers.values))
         latMaxInd = find_nearest(array = topo.lat_centers.values, value = np.max(grid.lat_centers.values))
         lonMinInd = find_nearest(array = topo.lon_centers.values, value = np.min(grid.lon_centers.values))
@@ -485,12 +489,12 @@ class TopoUtils:
         topo['landmask'] = (('ny', 'nx'), lm_ds)
 
         # regrid our topography and land/ocean mask based on method
-        if method=='median' or 'mean':
+        if method=='median' or method=='mean':
             npRegridder_out = numpyRegridder(gridXr=grid, topoXr=topo, topoVarName=topoVarName, numMethod=method, superGrid=superGrid)
             topo_out = npRegridder_out[topoVarName]
             lm_ds_out = npRegridder_out['landmask']
-            
-        if method=='conservative' or 'bilinear' or 'nearests2d' or 'nearestd2s' or 'patch':
+
+        if method=='conservative' or method=='bilinear' or method=='nearests2d' or method=='nearestd2s' or method=='patch':
             regridder = xe.Regridder(topo, grid, method=method, periodic=periodic)
             topo_out = regridder(ds)
             lm_ds_out = regridder(lm_ds)
@@ -498,7 +502,7 @@ class TopoUtils:
             if superGrid==True:
                 topo_out = topo_out.coarsen(nx=2,ny=2, boundary='pad').mean()
                 lm_ds_out = lm_ds_out.coarsen(nx=2,ny=2, boundary='pad').mean()
-        
+
         if convert_to_depth==True:
             topo_out = topo_out.where(topo_out < 0.0000001)
             topo_out.values = topo_out.values * -1
