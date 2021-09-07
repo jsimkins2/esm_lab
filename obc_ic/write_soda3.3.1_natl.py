@@ -816,12 +816,12 @@ def write_soda(soda_root, soda_version, soda_prefix, segments, start_year, end_y
     
                 soda_t = (
                     soda[['temp', 'salt', 'ssh', 'yt_ocean', 'xt_ocean', 'st_ocean']]
-                    .rename({'yt_ocean': 'lat', 'xt_ocean': 'lon', 'st_ocean': 'z'})
+                    .rename({'ssh' : 'zeta', 'yt_ocean': 'lat', 'xt_ocean': 'lon', 'st_ocean': 'z'})
                 )
     
                 for seg in segments:
                     seg.regrid_velocity(soda_u['u'], soda_u['v'], suffix=y)
-                    for tr in ['temp', 'salt', 'ssh']:
+                    for tr in ['temp', 'salt', 'zeta']:
                         seg.regrid_tracer(soda_t[tr], suffix=y)
 
 
@@ -836,7 +836,7 @@ def main():
     hgrid = xarray.open_dataset('/Users/james/Documents/natlGrid/natl_ocean_hgrid.nc')
     segments = [
         Segment(1, 'south', hgrid, output_dir=outdir),
-        Segment(2, 'east', hgrid, output_dir=outdir)
+        Segment(2, 'north', hgrid, output_dir=outdir)
     ]
 
     # Years that the model will be run for.
