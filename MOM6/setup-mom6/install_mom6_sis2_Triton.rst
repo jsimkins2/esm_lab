@@ -1,4 +1,4 @@
-Installing MOM6+SIS2 on NCAR's Cheyenne
+Installing MOM6+SIS2 on Rutger's Triton
 ============================================================
 Note that you'll have to change all instances of jsimkins to your cheyenne username
 
@@ -24,7 +24,7 @@ Note that you'll have to change all instances of jsimkins to your cheyenne usern
    git submodule init
    git submodule update
 
-4) Create a build directory within /glade/work/jsimkins/MOM6-examples/
+4) Create a build directory within ~/MOM6-examples/
 
 .. code-block :: bash
 
@@ -45,7 +45,7 @@ Note that you'll have to change all instances of jsimkins to your cheyenne usern
 
 .. code-block :: bash
 
-    cd /glade/work/jsimkins/MOM6-examples/
+    cd ~/MOM6-examples/
     vim build_mom6_sis2.bash
 
 7) Copy the following code to build_mom6_sis2.bash
