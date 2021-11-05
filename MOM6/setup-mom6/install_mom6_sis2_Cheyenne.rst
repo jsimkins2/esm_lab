@@ -1,5 +1,6 @@
 Installing MOM6+SIS2 on NCAR's Cheyenne
 ============================================================
+Note that you'll have to change all instances of jsimkins to your cheyenne username
 
 1) Navigate to work directory on glade
 
