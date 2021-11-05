@@ -34,10 +34,12 @@ Note that you'll have to change all instances of jsimkins to your cheyenne usern
 5) Edit the `triton-gnu.mk` flags for netCDF4 use
 
 .. code-block :: bash
+
     vim ~/MOM6-examples/src/mkmf/templates/triton-gnu.mk
 
 - Ensure the FFLAGS and CFLAGS are using netCDF4. (i.e., `FFLAGS += -DGFORTRAN -Duse_netCDF4` and `CFLAGS := -D__IFC -Duse_netCDF4`
 - using netCDF3 will result in restart errors during model execution
+
 
 6) Create bash file in MOM6-examples
 
