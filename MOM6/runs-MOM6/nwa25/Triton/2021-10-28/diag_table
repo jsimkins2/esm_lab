@@ -1,0 +1,22 @@
+NWA-hycom1
+1900 1 1 0 0 0
+
+# MOM6 ocean diagnostics files
+"ocean_daily",            1, "days", 1, "days", "time"
+#"ocean_static",          -1, "months", 1, "days", "time" # A protected name. Do not change this line.
+
+# Daily Diagnostic fileds
+#"ocean_model", "u",          	"u",          	"ocean_daily", "all", "mean", "none", 2
+#"ocean_model", "v",          	"v",          	"ocean_daily", "all", "mean", "none", 2
+"ocean_model", "SSH",           "ssh",          "ocean_daily", "all", "mean", "none", 2
+#"ocean_model", "SSU",           "ssu",          "ocean_daily", "all", "mean", "none",2
+#"ocean_model", "SSV",           "ssv",          "ocean_daily", "all", "mean", "none",2
+"ocean_model", "SST",           "sst",          "ocean_daily", "all", "mean", "none",2
+#"ocean_model", "SSS",           "sss",          "ocean_daily", "all", "mean", "none",2
+#"ocean_model", "ePBL_h_ML",     "ePBL_h_ML",    "ocean_daily", "all", "mean", "none", 2
+#"ocean_model", "e",             "eta",          "ocean_daily", "all", "mean", "none",2
+#"ocean_model", "temp",          "temp",         "ocean_daily", "all", "mean", "none", 2
+#"ocean_model", "salt",          "salt",         "ocean_daily", "all", "mean", "none", 2
+#"ocean_model_z", "temp",        "temp",         "ocean_daily", "all", "mean", "none", 2
+#"ocean_model_z", "salt",        "salt",         "ocean_daily", "all", "mean", "none", 2
+#"ocean_model",   "h",           "h",            "ocean_daily", "all", "mean", "none",2
