@@ -85,7 +85,13 @@ Note that you'll have to change all instances of jsimkins to your cheyenne usern
 
     (cd build/intel/ice_ocean_SIS2/repro/; source ../../env; make NETCDF=4 REPRO=1 MOM6 -j)
 
-10) Run build_mom6_sis2.bash
+10) Make build_mom6_sis2.bash executable
+
+.. code-block :: bash
+
+    chmod+x build_mom6_sis2.bash
+
+11) Run build_mom6_sis2.bash
 
 .. code-block :: bash
 
